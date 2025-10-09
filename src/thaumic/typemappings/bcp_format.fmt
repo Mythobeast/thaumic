@@ -1,0 +1,15 @@
+14.0
+13
+1       SQLCHAR             0       7       ","    1     _Action                                                                          SQL_Latin1_General_CP1_CI_AS
+2       SQLBIGINT           0       8       ","    2     RepSet_Variation_ID                                                              ""
+3       SQLDATETIME         0       8       ","    3     _AsOfTimeStamp                                                                   ""
+4       SQLINT              0       4       ","    4     PfiActivity                                                                      ""
+5       SQLBIGINT           0       8       ","    5     PfiWorkunit                                                                      ""
+6       SQLCHAR             0       1       ","    6     ActStatus                                                                        SQL_Latin1_General_CP1_CI_AS
+7       SQLCHAR             0       8000    ","    7     ActStatus_State                                                                  SQL_Latin1_General_CP1_CI_AS
+8       SQLCHAR             0       100     ","    8     ActivityName                                                                     SQL_Latin1_General_CP1_CI_AS
+9       SQLCHAR             0       10      ","    9     ActivityType                                                                     SQL_Latin1_General_CP1_CI_AS
+10      SQLDATETIME         0       8       ","    10    EndDate                                                                          ""
+11      SQLCHAR             0       8000    ","    11    Log                                                                              SQL_Latin1_General_CP1_CI_AS
+12      SQLDATETIME         0       8       ","    12    StartDate                                                                        ""
+13      SQLCHAR             0       36      ","    13    UniqueID                                                                         SQL_Latin1_General_CP1_CI_AS
