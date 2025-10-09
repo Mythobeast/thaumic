@@ -1,15 +1,17 @@
-# Thaumaturge
+# Thaumic
 
-Thaumaturge is a database management tool that is targeted at filling in a few
-gaps left by existing tools.
+This is a work in progress. Don't read too much into it.
+
+Thaumic is a DDL-based database management tool. While
+most ORM tools focus on allowing complex mappings of data,
+Thaumic's primary purpose is to allow you to take a description
+of one database and recreate it in another database engine.
 
 1. Dynamic creation and maintenance of schema
 2. Cross-platform data transfers
 
 It does this by converting all data types to the ANSI standard
 column specified in [INFORMATION_SCHEMA](https://en.wikipedia.org/wiki/Information_schema).
-
-This is a work in progress. Don't read too much into it.
 
 ## Selects
 
