@@ -145,13 +145,12 @@ class FieldData:
 		self.table_owner = row[1]
 		self.table_name = row[2]
 		self.column_name = row[3].lower()
-		self.data_type = row[5]
+		self.data_type = row[4]
 		self.type_name = row[5]
 		self.precision = row[6]
 		self.length = row[7]
 		self.scale = row[8]
 		self.radix = row[9]
-		self.nullable = row[17]
 		self.remarks = row[11]
 		self.default = row[12]
 		self.sql_data_type = None
@@ -159,9 +158,10 @@ class FieldData:
 		self.char_octet_length = row[15]
 		self.ordinal_position = row[16]
 		self.is_nullable = row[17]
+		self.nullable = row[17]
 		self.ss_data_type = None
 		self.is_pk = 0
-		self.is_dimension = None
+		self.is_dimension = False
 		self.column_family = None
 		self.column_def = None
 		self.autoinc_seed = None

@@ -339,7 +339,7 @@ class SqliteManager(CnxnManager):
 		return f'"{schema}_{sqlfield.fd.table_name}"'
 
 	@classmethod
-	def sql_create_table_prelude(cls, ts):
+	def sql_create_if_not_exists(cls, ts):
 		return f"CREATE TABLE IF NOT EXISTS"
 
 	@classmethod

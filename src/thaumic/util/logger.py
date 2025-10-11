@@ -10,6 +10,7 @@ LOGGER = None
 class ConditionalLogger:
 	def __init__(self, logspec):
 		self.logspec = logspec
+		self.name = logspec.get('name', 'Thaumic Logger')
 		self.offswitch = logspec.get('offswitch', False)
 		self.active = logspec.get('init_active', True)
 		self.log_flag_stack = [True]
@@ -17,9 +18,7 @@ class ConditionalLogger:
 		self.table_blacklist = logspec.get('table_blacklist', [])
 		self.method_whitelist = logspec.get('method_whitelist', [])
 		self.method_blacklist = logspec.get('method_blacklist', [])
-		if len(logspec) == 0:
-			self.logger = Logger("Thaumic Debugger")
-			return
+		self.logger = Logger(self.name)
 
 	def temp_debug(self, value):
 		self.log_flag_stack.append(self.active)
@@ -30,7 +29,7 @@ class ConditionalLogger:
 			self.active = self.log_flag_stack.pop()
 		else:
 			self.active = self.log_flag_stack[0]
-			self.logger.error(f"")
+			self.logger.error("Attempt to decrease log_flag_stack below 1")
 
 	def filter(self, tablename):
 

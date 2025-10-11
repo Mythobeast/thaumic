@@ -50,7 +50,7 @@ class TestConditionalLogger(TestCase):
 		self.assertEqual(False, self.logger.active)
 
 	def test_initialization(self):
-		self.assertEqual(self.logger.logger.name, "test_logger")
+		self.assertEqual(self.logger.name, "test_logger")
 		self.assertEqual(self.logger.logspec, self.logspec)
 
 		self.assertEqual([True], self.logger.log_flag_stack)

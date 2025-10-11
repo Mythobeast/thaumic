@@ -12,7 +12,11 @@ class TableSpec:
 		self.fieldlist = fieldlist
 		self.f = dict()
 		self.pk = None
+		# List of all field names
 		self.fieldnames = []
+		# List of fields that can be inserted
+		# Excludes auto-increment
+		self.insert_fields = []
 		self.non_seqids = []
 		self.dimensions = []
 		self.metrics = []
@@ -25,12 +29,14 @@ class TableSpec:
 				self.non_seqids.append(itr.fixedname)
 			if itr.is_dimension:
 				self.dimensions.append(itr.fixedname)
+				self.insert_fields.append(itr.fixedname)
 			elif itr.fd.is_pk:
 				if self.pk is not None:
 					raise ValueError(f"Multiple fields marked primary key in table {schemaname}.{tablename}")
 				self.pk = itr
 			else:
 				self.metrics.append(itr.fixedname)
+				self.insert_fields.append(itr.fixedname)
 		self.fieldnames_str = '"%s"' % '","'.join(self.fieldnames)
 		self.nonseqid_str = '"%s]"' % '","'.join(self.non_seqids)
 		self.placeholders = ','.join(['%s'] * len(self.fieldnames))
@@ -38,18 +44,11 @@ class TableSpec:
 
 
 	def set_primary_key(self, fieldname):
-		if fieldname in self.f:
-			self.f[fieldname].fd.is_pk = True
+		if fieldname not in self.f:
+			raise ValueError(f"Attempting to set non-existent field {fieldname} as primary key" )
+		self.pk = self.f[fieldname]
+		self.pk.fd.is_pk = True
 
-
-	def select_all(self, dbmgr):
-		sql = f"SELECT {self.fieldnames_str} FROM {self.fulltablename(dbmgr)};"
-		try:
-			retval = dbmgr.fetch(sql)
-		except pyodbc.ProgrammingError:
-#			print(f"Programming error executing |{sql}")
-			raise
-		return retval
 
 	def generate_create(self, dbmgr):
 		# self.mktblnm(dbmgr)
@@ -65,7 +64,7 @@ class TableSpec:
 
 		holder = [
 			"CREATE TABLE",
-#			self.sql_create_table_prelude(),
+#			self.sql_create_if_not_exists(),
 			self.fulltablename(dbmgr),
 			"(", ",".join(fields), ")"
 		]

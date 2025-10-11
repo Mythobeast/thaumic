@@ -24,7 +24,11 @@ class CnxnManager:
 		self.enc_ctype = dbspec.get('CTYPE', None)
 		self.debug = dbspec.get('DEBUGME', None)
 		if logger is None:
-			self.logger = ConditionalLogger(dbspec.get("LOGSPEC", dict()))
+			logspec = dbspec.get('LOGSPEC')
+			if logspec is None:
+				self.logger = ConditionalLogger(dict())
+			else:
+				self.logger = ConditionalLogger(logspec)
 		else:
 			self.logger = logger
 

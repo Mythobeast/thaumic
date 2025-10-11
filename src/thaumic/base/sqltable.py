@@ -12,7 +12,6 @@ RETFORM_DICT = 1
 RETFORM_OBJ = 2
 
 
-
 class SQLTable:
 	TABLENAME = None
 	SCHEMA = None
@@ -23,7 +22,6 @@ class SQLTable:
 		# SQLField('member_id', 'INT', 1)
 	]
 	CONSTRAINTS = []
-	ftn = None
 
 	def __init__(self, ts=None, v=None):
 		self.ftn = None
@@ -61,6 +59,19 @@ class SQLTable:
 				return
 
 		super().__setattr__(name, value)
+
+
+	def set(self, key, value):
+		if key not in self.ts.f:
+			raise AttributeError(f'{self.__class__} has no field {key}')
+		self.v[key] = value
+
+	def get(self, key, default=None):
+		if key not in self.ts.f:
+			raise AttributeError(f'{self.__class__} has no field {key}')
+		if key not in self.v or self.v[key] is None:
+			return default
+		return self.v[key]
 
 	def clear(self):
 		self.v = dict()
@@ -182,7 +193,7 @@ class SQLTable:
 			fields.append(f"[{itr.name}] {dbmgr.type_declaration(itr.fd)}")
 
 		holder = [
-			dbmgr.sql_create_table_prelude(self.ts),
+			dbmgr.sql_create_if_not_exists(self.ts),
 			dbmgr.mk_tablename(self.ts),
 			"(",
 			",".join(fields),
@@ -194,8 +205,7 @@ class SQLTable:
 		holder.append(')')
 		return dbmgr.adjust_query(" ".join(holder))
 
-
-	def get_pk(self, dbmgr):
+	def assure_pk(self, dbmgr):
 		''' Will return the primary key value if it is set.
 		If it isn't set, it will retrieve it from the database.
 		If this row doesn't exist in the database, it will create the row and then retrieve it.
@@ -203,13 +213,13 @@ class SQLTable:
 		generated id's.
 		'''
 		if self.ts.pk is None:
-			raise ValueError(f"Table {self.ftn(dbmgr)}: Attempt to retrieve a primary key when none assigned")
-		if self.ts.pk.name in self.v and self.v[self.ts.pk.name]:
+			raise ValueError(f"Table {self.fulltablename(dbmgr)}: Attempt to retrieve a primary key when none assigned")
+		if self.ts.pk.name in self.v and self.v[self.ts.pk.name] is not None:
 			return self.v[self.ts.pk.name]
 
-		for itr in self.dimensions:
+		for itr in self.ts.dimensions:
 			if itr not in self.v:
-				raise ValueError(f"Table {self.fulltablename(dbmgr)}: Cannot get_id without {itr} being populated")
+				raise ValueError(f"Table {self.fulltablename(dbmgr)}: Cannot store without dimension {itr} being populated")
 		
 		select_sql, select_values = self.generate_select(dbmgr)
 		response = dbmgr.fetch(select_sql, select_values)
@@ -237,8 +247,8 @@ class SQLTable:
 	def pk_update(self, dbmgr):
 		''' This function will overwrite whatever is in the row identified by the primary key
 		'''
-		if self.ts.pk is None:
-			raise ValueError(f"Table {self.fulltablename(dbmgr)}: Attempt to retrieve a primary key when none assigned")
+		if not self.has_pk():
+			raise ValueError(f"Table {self.fulltablename(dbmgr)}: Attempt to store by primary key when none assigned")
 		setlist = []
 		valuelist = []
 		pkname = self.ts.pk.name
@@ -249,10 +259,10 @@ class SQLTable:
 			valuelist.append(value)
 		valuelist.append(self.v[pkname])
 		fullset = ",".join(setlist)
-		sql = [f"UPDATE {self.fulltablename(dbmgr)} ",
+		sql = [f"UPDATE {self.fulltablename(dbmgr)}",
 		       f"SET {fullset} WHERE [{pkname}]={dbmgr.plhd}"
 		       ]
-		dbmgr.execute(sql, valuelist)
+		dbmgr.execute(' '.join(sql), valuelist)
 		return dbmgr.rowcount
 
 	def do_insert(self, dbmgr):
@@ -497,7 +507,7 @@ class SQLTable:
 		whereconditions, values = self.generate_whereconditions(dbmgr)
 		whereclause = ' AND '.join(whereconditions)
 		sql = ' '.join([
-			f"SELECT {self.fieldnames_str}",
+			f"SELECT {self.ts.fieldnames_str}",
 			f"FROM {self.fulltablename(dbmgr)}",
 			f"WHERE {whereclause}"])
 		return sql, values
@@ -566,11 +576,16 @@ class SQLTable:
 
 		return retval
 
+	def set_primary_key(self, fieldname):
+		self.ts.set_primary_key(fieldname)
+
 	def set_values(self, values):
 		if len(values) != len(self.ts.f):
 			raise ValueError(f"set_values expected {len(self.ts.f)} values, got {len(values)}")
 		if isinstance(values, dict):
-			self.v = values
+			for key, value in values.items():
+				if key in self.ts.f:
+					self.v[key] = value
 			return
 		elif isinstance(values, list):
 			itr = 0
