@@ -91,6 +91,8 @@ class SQLTable:
 		'''
 		# for line in traceback.format_stack():
 		# 	print(line.strip())
+		dbmgr.logger.temp_debug(False)
+
 		self.ensure_table_exists(dbmgr)
 		# Load the database's list of fields
 		columndetails = dbmgr.get_column_details(self.ts)
@@ -104,23 +106,23 @@ class SQLTable:
 			if onefield.fixedname not in db_fielddict:
 				missingfields.append(onefield)
 
-		if len(missingfields) == 0:
-			return db_fielddict
-
-		# Add missing fields
-		for onefield in missingfields:
-			dbmgr.add_column(onefield)
-			db_fielddict[onefield.fixedname] = onefield
+		if len(missingfields) > 0:
+			for onefield in missingfields:
+				dbmgr.add_column(onefield)
+				db_fielddict[onefield.fixedname] = onefield
+		dbmgr.logger.reset_debug()
 
 		return db_fielddict
 
 	def ensure_table_exists(self, dbmgr):
+
 		self.ftn = dbmgr.mk_tablename(self.ts)
 		if dbmgr.table_exists(self.ts):
 			return True
 
 		dbmgr.create_schema(self.ts.schemaname)
 		dbmgr.execute(self.generate_create(dbmgr))
+
 
 	def truncate_table(self, dbmgr):
 		dbmgr.execute(f"TRUNCATE TABLE {self.ftn};")
@@ -341,35 +343,35 @@ class SQLTable:
 				raise ValueError(f"Attempt to upsert table {self.fulltablename(dbmgr)} "
 								f"without setting dimension {fieldname}")
 		if self.do_insert(dbmgr) == 1:
-			dbmgr.debug_out(f"insert from indate successful")
+			dbmgr.logger.debug(f"insert from indate successful")
 			return 1
-		dbmgr.debug_out(f"insert from indate failed, updating")
+		dbmgr.logger.debug(f"insert from indate failed, updating")
 		if self.has_pk():
 				# If primary key is populated, then this will definitely be an update
 			return self.pk_update(dbmgr)
 		self.do_update(dbmgr)
 		return dbmgr.rowcount
 
-	def fetch_to_dict(self, columnnames, query, vargs=None, raw=False, retries=0):
+	def fetch_to_dict(self, columnnames, query, params=None, raw=False, retries=0):
 		if not raw:
 			query = self.adjust_query(query)
-		if self.connection is None:
+		if self.cnxn is None:
 			self.connect()
 		retval = None
 		while retries > 0:
 			retries -= 1
-			retval = self._fetch_to_dict(columnnames, query, vargs)
+			retval = self._fetch_to_dict(columnnames, query, params)
 		return retval
 
-	def _fetch_to_dict(self, columnnames, query, vargs):
+	def _fetch_to_dict(self, columnnames, query, params):
 		self.last_query = query
-		self.last_parameters = vargs
-		self.debug_out(f"{self.__class__.__name__} fetching {query}, {vargs}", end=",")
+		self.last_parameters = params
+		self.logger.debug(f"{self.__class__.__name__}, fetching {query}, {params}", end=",")
 
 		retval = []
 		with self.connection.cursor() as cursor:
-			if vargs:
-				cursor.execute(query, vargs)
+			if params:
+				cursor.execute(query, params)
 			else:
 				cursor.execute(query)
 			self.rowcount = 0
@@ -676,7 +678,7 @@ class CachedTable(SQLTable):
 	@classmethod
 	def load_cache_where(cls, dbmgr, sqlwhere=None, params=None):
 		instance = cls()
-		dbmgr.debug_out(f"Loading cache for {cls.TABLENAME}")
+		dbmgr.logger.debug(f"Loading cache for {cls.TABLENAME}")
 		dbmgr.temp_debug(False)
 		objects = instance.select_objects(dbmgr, sqlwhere=sqlwhere, params=params)
 		for obj in objects:
@@ -686,8 +688,7 @@ class CachedTable(SQLTable):
 	def cached_store(self, dbmgr):
 		cache_key = self.get_text_key()
 		if cache_key not in self.CACHE:
-			if dbmgr.debugme:
-				print(f'key {cache_key} not cached')
+			self.logger.debug(f'key {cache_key} not cached')
 			self.store(dbmgr)
 			return True
 		cached = self.CACHE[cache_key]
@@ -704,8 +705,7 @@ class CachedTable(SQLTable):
 			trueval = str(self.ts.f[key].formatvalue(self.v[key]))
 			truecached = str(cached.v[key])
 			if trueval != truecached:
-				if dbmgr.debugme:
-					print(f'Key {key} of {cache_key} out of sync: {trueval}{type(self.ts.f[key].formatvalue(self.v[key]))} != {truecached}{type(cached.v[key])}')
+				self.logger.debug(f'Key {key} of {cache_key} out of sync: {trueval}{type(self.ts.f[key].formatvalue(self.v[key]))} != {truecached}{type(cached.v[key])}')
 				self.store(dbmgr)
 				return True
 		return False

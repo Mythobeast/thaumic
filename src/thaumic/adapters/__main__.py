@@ -1,6 +1,4 @@
 import pkgutil
-from sys import modules
-
 
 # MODLIST = dict()\
 #
@@ -9,7 +7,6 @@ from sys import modules
 #             MODLIST[thismod.DBSPEC.enginename] = thismod
 #
 import inspect
-import sys
 
 def get_current_module_name():
     # Get the current stack frame
@@ -25,4 +22,5 @@ def get_current_module_name():
     if current_module is not None:
         for module  in pkgutil.iter_modules(current_module.__path__):
             print("sub module:", module.__name__)
+
 get_current_module_name()

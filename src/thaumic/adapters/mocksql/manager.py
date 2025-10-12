@@ -23,13 +23,13 @@ class MockSqlManager(CnxnManager):
 		self.params = None
 		self.plhd = '%s'
 
-	def execute(self, query, vargs=None):
+	def execute(self, query, params=None):
 		self.executed = query
-		self.params = vargs
+		self.params = params
 
-	def executemany(self, query, vargs):
+	def executemany(self, query, params):
 		self.executed = query
-		self.params = vargs
+		self.params = params
 
 	def schema_exists(self, schema):
 		return True
@@ -40,7 +40,7 @@ class MockSqlManager(CnxnManager):
 	def table_exists(self, ts):
 		raise NotImplemented
 
-	def fetch(self, query, vargs=None, raw=False, retries=0):
+	def fetch(self, query, params=None, raw=False, retries=0):
 		raise NotImplemented
 
 	def get_jdbc_connstr(self):

@@ -85,19 +85,19 @@ class SqliteManager(CnxnManager):
 			else:
 				self.logger.error(err)
 
-	def fetch(self, query, vargs=None, raw=False, retries=0):
+	def fetch(self, query, params=None, raw=False, retries=0):
 		self.cnx()
 		if isinstance(query, list):
 			query = self.adjust_quoting(' '.join(query))
 		elif not raw:
 			query = self.adjust_quoting(query)
 		if self.debug:
-			print(f"MySqlManager fetching {query}, {vargs}")
+			print(f"SqliteManager fetching {query}, {params}")
 
 		try:
 			cursor = self.cnxn.cursor()
-			if vargs:
-				cursor.execute(query, vargs)
+			if params:
+				cursor.execute(query, params)
 			else:
 				cursor.execute(query)
 		except sqlite3.IntegrityError as err:
@@ -116,25 +116,25 @@ class SqliteManager(CnxnManager):
 			retval.append(list(oneitem))
 
 		if self.debug:
-			print(f"MySqlManager returning from fetch {retval}")
+			print(f"SqliteManager returning from fetch {retval}")
 		return retval
 
-	def execute(self, query, vargs=None, raw=False):
+	def execute(self, query, params=None, raw=False):
 		self.cnx()
 		if isinstance(query, list):
 			query = ' '.join(query)
 		if not raw:
 			query = self.adjust_quoting(query)
 		if self.debug:
-			print(f"SqliteManager executing {query}, {vargs}")
+			print(f"SqliteManager executing {query}, {params}")
 		self.last_query = query
-		self.last_parameters = vargs
+		self.last_parameters = params
 		self.rowcount = None
 		self.lastrowid = None
 		try:
 			cursor = self.cnxn.cursor()
-			if vargs:
-				response = cursor.execute(query, vargs)
+			if params:
+				response = cursor.execute(query, params)
 			else:
 				response = cursor.execute(query)
 			self.rowcount = response.rowcount
@@ -156,7 +156,7 @@ class SqliteManager(CnxnManager):
 			raise
 		return response
 
-	def executemany(self, query, vargs, raw=False):
+	def executemany(self, query, params, raw=False):
 		self.cnx()
 
 		if isinstance(query, list):
@@ -164,11 +164,11 @@ class SqliteManager(CnxnManager):
 		elif not raw:
 			query = self.adjust_quoting(query)
 		if self.debug:
-			print(f"MySQL executing many {query}: {vargs}")
+			print(f"MySQL executing many {query}: {params}")
 		self.rowcount = 0
 		cursor = self.cnxn.cursor()
 		try:
-			for itr in vargs:
+			for itr in params:
 				cursor.execute(query, itr)
 				self.rowcount += 1
 		except TypeError as te:
@@ -194,7 +194,7 @@ class SqliteManager(CnxnManager):
 			uniquecount = self.fetch(query)[0]
 			if uniquecount == rawcount:
 				candidates.append(columnname)
-		self.debug_out("Candidates for %s: %s" % (tablename, candidates))
+		self.logger.debug("Candidates for %s: %s" % (tablename, candidates))
 		return candidates
 
 	def refresh_schemacache(self):

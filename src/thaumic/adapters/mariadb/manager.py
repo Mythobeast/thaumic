@@ -62,7 +62,7 @@ class MySqlManager(CnxnManager):
 			self.cnxn = sql.connect(user=self.username, password=self.password,
 										host=self.host, database=self.dbname)
 #		except OperationalError as oper:
-#			if self.debugme:
+#			if self.debug:
 #				print(f"Operational error: Something is wrong with your user name or password: {oper}")
 		except sql.Error as err:
 			print(f"error: {err} {err.args[0]}")
@@ -73,18 +73,17 @@ class MySqlManager(CnxnManager):
 			else:
 				self.logger.error(err)
 
-	def fetch(self, query, vargs=None, raw=False, retries=0):
+	def fetch(self, query, params=None, raw=False, retries=0):
 		self.cnx()
 		if isinstance(query, list):
 			query = self.adjust_quoting(' '.join(query))
 		elif not raw:
 			query = self.adjust_quoting(query)
-		if self.debugme:
-			print(f"MySqlManager fetching {query}, {vargs}")
+		self.logger.debug(f"MySqlManager fetching {query}, {params}")
 
 		with self.cnxn.cursor() as cursor:
-			if vargs:
-				cursor.execute(query, vargs)
+			if params:
+				cursor.execute(query, params)
 			else:
 				cursor.execute(query)
 
@@ -93,51 +92,47 @@ class MySqlManager(CnxnManager):
 			for oneitem in cursor:
 				self.rowcount += 1
 				retval.append(list(oneitem))
-		if self.debugme:
-			print(f"MySqlManager returning from fetch {retval}")
+			self.logger.debug(f"MySqlManager returning from fetch {retval}")
 		return retval
 
-	def execute(self, query, vargs=None, raw=False):
+	def execute(self, query, params=None, raw=False):
 		self.cnx()
 		if isinstance(query, list):
 			query = self.adjust_quoting(' '.join(query))
 		elif not raw:
 			query = self.adjust_quoting(query)
-		if self.debugme:
-			print(f"MySqlManager executing {query}, {vargs}")
+		self.logger.debug(f"MySqlManager executing {query}, {params}")
 		try:
 			with self.cnxn.cursor() as cursor:
-				if vargs:
-					response = cursor.execute(query, vargs)
+				if params:
+					response = cursor.execute(query, params)
 				else:
 					response = cursor.execute(query)
 				self.rowcount = response
-			if self.debugme:
-				print(f"response: {response}")
+			self.logger.debug(f"response: {response}")
 			self.cnxn.commit()
 		except BaseException as be:
-			if self.debugme:
+			if self.debug:
 				print(f"Programming error attempting to execute {query}: {be}")
 			raise
 		return response
 
-	def executemany(self, query, vargs, raw=False):
+	def executemany(self, query, params, raw=False):
 		self.cnx()
 
 		if isinstance(query, list):
 			query = self.adjust_quoting(' '.join(query))
 		elif not raw:
 			query = self.adjust_quoting(query)
-		if self.debugme:
-			print(f"MySQL executing many {query}: {vargs}")
+		self.logger.debug(f"MySQL executing many {query}: {params}")
 		self.rowcount = 0
 		with self.cnxn.cursor() as cursor:
 			try:
-				for itr in vargs:
+				for itr in params:
 					cursor.execute(query, itr)
 					self.rowcount += 1
 			except TypeError as te:
-				if self.debugme:
+				if self.debug:
 					print(f"Programming error attempting to execute {query}: {te}")
 				raise te
 		self.cnxn.commit()
@@ -185,14 +180,12 @@ class MySqlManager(CnxnManager):
 
 	def table_exists(self, ts):
 		fulltablename = self.mk_tablename(ts).replace('`', '')
-		if self.debugme:
-			print(f"Checking if {fulltablename} exists")
+		self.logger.debug(f"Checking if {fulltablename} exists")
 		tablelist = self.fetch("show tables;")
 		for itr in tablelist:
 			if fulltablename == itr[0].lower():
 				return True
-		if self.debugme:
-			print(f"{fulltablename} not found in tablelist")
+			self.logger.debug(f"{fulltablename} not found in tablelist")
 		return False
 
 	def list_tables(self):
@@ -213,14 +206,12 @@ class MySqlManager(CnxnManager):
 		response = self.get_columns(ts)
 		retval = []
 		for row in response:
-			if self.debugme:
-				print(f"row = {row}")
+			self.logger.debug(f"row = {row}")
 			thiscol = {}
 			for itr in range(0,len(self.COLUMNLIST_FIELDS)):
 				thiscol[self.COLUMNLIST_FIELDS[itr]] = row[itr]
 			retval.append(thiscol)
-		if self.debugme:
-			print(f"get_column_details({ts}) returning {retval}")
+			self.logger.debug(f"get_column_details({ts}) returning {retval}")
 		return retval
 
 	def get_columns(self, ts):
@@ -251,11 +242,9 @@ class MySqlManager(CnxnManager):
 			" FROM INFORMATION_SCHEMA.columns ",
 			f"where table_name='{fulltablename}';"]
 		sqltxt = ' '.join(sql)
-		if self.debugme:
-			print(f"Running {sqltxt}")
+		self.logger.debug(f"Running {sqltxt}")
 		retval = self.fetch(sqltxt)
-		if self.debugme:
-			print(f"get_columns({ts}) returning {retval}")
+		self.logger.debug(f"get_columns({ts}) returning {retval}")
 		return retval
 
 	def get_jdbc_connstr(self):

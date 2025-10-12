@@ -2,7 +2,7 @@ import pyodbc
 import time
 
 from thaumic.base.manager import CnxnManager
-from thaumic.typemappings.fielddata import FieldData, DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, AUTO_INCREMENT, \
+from thaumic.typemappings.fielddata import FieldData, DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, \
 	PARAMLESS_TYPES
 
 DB_INST = None
@@ -46,7 +46,7 @@ class MsSqlManager(CnxnManager):
 		self.connect()
 		self.schemacache = dict()
 		self.lastcachecheck = 0
-		self.debugme = dbspec.get('DEBUGME', DEBUG)
+		self.debug = dbspec.get('DEBUGME', DEBUG)
 
 	def connect(self):
 		''' Get a new connection, close old connection if it exists
@@ -57,14 +57,14 @@ class MsSqlManager(CnxnManager):
 		constr_list = []
 		if self.dsn:
 			constr_list.append(f'DSN={self.dsn}')
-		if self.username:
-			constr_list.append(f'UID={self.username}')
-		if self.password:
-			constr_list.append(f"PWD={self.password}")
+		if self.user:
+			constr_list.append(f'UID={self.user}')
+		if self.pw:
+			constr_list.append(f"PWD={self.pw}")
 		if self.host:
 			constr_list.append(f'HOST={self.host}')
-		if self.dbname:
-			constr_list.append(f'DATABASE={self.dbname}')
+		if self.database:
+			constr_list.append(f'DATABASE={self.database}')
 		if self.trusted:
 			constr_list.append('Trusted_Connection=yes')
 		if self.authentication:
@@ -87,19 +87,17 @@ class MsSqlManager(CnxnManager):
 			# 	driver='/usr/local/lib/libtdsodbc.so'
 			# )
 		except pyodbc.InterfaceError as ie:
-			if self.debugme:
-				print(f"Failure to connect to database with conn string DSN={self.dsn};UID={self.username};PWD=naestrai")
+			self.logger.debug(f"Failure to connect to database with conn string DSN={self.dsn};UID={self.user};PWD=naestrai")
 			raise ie
 
-	def fetch(self, query, vargs=None, raw=False, retries=0):
+	def fetch(self, query, params=None, raw=False, retries=0):
 		if not raw:
 			query = self.adjust_quoting(query)
-		if self.debugme:
-			print(f"MsSqlManager fetching {query}, {vargs}")
+			self.logger.debug(f"MsSqlManager fetching {query}, {params}")
 
 		with self.cnxn.cursor() as cursor:
-			if vargs:
-				cursor.execute(query, vargs)
+			if params:
+				cursor.execute(query, params)
 			else:
 				cursor.execute(query)
 
@@ -108,15 +106,13 @@ class MsSqlManager(CnxnManager):
 			for oneitem in cursor:
 				self.rowcount += 1
 				retval.append(list(oneitem))
-		if self.debugme:
-			print(f"MsSqlManager returning from fetch {retval}")
+		self.logger.debug(f"MsSqlManager returning from fetch {retval}")
 		return retval
 
 	def execute(self, query, params=None, raw=False):
 		if not raw:
 			query = self.adjust_quoting(query)
-		if self.debugme:
-			print(f"MsSqlManager executing {query}, {params}")
+			self.logger.debug(f"MsSqlManager executing {query}, {params}")
 		try:
 			with self.cnxn.cursor() as cursor:
 				if params:
@@ -125,28 +121,26 @@ class MsSqlManager(CnxnManager):
 					response = cursor.execute(query)
 
 				self.rowcount = cursor.rowcount
-			if self.debugme:
-				print(f"response: {response}")
+			self.logger.debug(f"response: {response}")
 			self.cnxn.commit()
 		except pyodbc.ProgrammingError:
-			if self.debugme:
+			if self.debug:
 				print(f"Programming error attempting to execute {query}")
 			raise
 		return self.rowcount
 
-	def executemany(self, query, vargs, raw=False):
+	def executemany(self, query, params, raw=False):
 		self.rowcount = 0
 		if not raw:
 			query = self.adjust_quoting(query)
 
-		if self.debugme:
-			print(f"MsSQL executing many: {query}: {be}")
+		self.logger.debug(f"MsSQL executing many: {query}: {params}")
 		with self.cnxn.cursor() as cursor:
 			try:
-				cursor.executemany(query, vargs)
+				cursor.executemany(query, params)
 				self.rowcount = cursor.rowcount
 			except pyodbc.ProgrammingError as pe:
-				if self.debugme:
+				if self.debug:
 					print(f"Programming error attempting to execute {query}: {pe}")
 				raise pe
 		self.cnxn.commit()
@@ -185,8 +179,7 @@ class MsSqlManager(CnxnManager):
 
 	def create_schema(self, schemaname):
 		schemaname = schemaname.lower()
-		if self.debugme:
-			print(f"create_schema {schemaname}")
+		self.logger.debug(f"create_schema {schemaname}")
 		if schemaname is None or schemaname == 'None':
 			raise ValueError("Attempt to create None schema!")
 		self.refresh_schemacache()
@@ -249,7 +242,7 @@ class MsSqlManager(CnxnManager):
 			return True
 		return False
 
-	def list_tables(self):
+	def list_tables(self, schema=None):
 		alltables = self.fetch("SELECT * FROM INFORMATION_SCHEMA.TABLES")
 		retval = []
 		for onetable in alltables:
@@ -267,14 +260,13 @@ class MsSqlManager(CnxnManager):
 		response = self.get_columns(ts)
 		retval = []
 		for row in response:
-			if self.debugme:
+			if self.debug:
 				print(f"row = {row}")
 			thiscol = {}
 			for itr in range(0,len(self.COLUMNLIST_FIELDS)):
 				thiscol[self.COLUMNLIST_FIELDS[itr]] = row[itr]
 			retval.append(thiscol)
-		if self.debugme:
-			print(f"get_column_details({ts}) returning {retval}")
+		self.logger.debug(f"get_column_details({ts}) returning {retval}")
 		return retval
 
 	def get_fielddescriptors(self, ts):
@@ -290,8 +282,6 @@ class MsSqlManager(CnxnManager):
 		''' Output should be equivalent to the output from sp_columns
 		'''
 		
-		if schema is None:
-			schema = self.schema
 		sql = [
 			"SELECT ",
 			"TABLE_CATALOG,",
@@ -314,13 +304,11 @@ class MsSqlManager(CnxnManager):
 			"IS_NULLABLE, 0",
 			" FROM INFORMATION_SCHEMA.columns ",
 			f"where table_name='{ts.tablename}' ",
-			f"and table_schema='{schema}';"]
+			f"and table_schema='{ts.schema}';"]
 		sqltxt = ' '.join(sql)
-		if self.debugme:
-			print(f"Running {sqltxt}")
+		self.logger.debug(f"Running {sqltxt}")
 		retval = self.fetch(sqltxt)
-		if self.debugme:
-			print(f"get_columns({tablename}, {schema}) returning {retval}")
+		self.logger.debug(f"get_columns({ts.tablename}, {ts.schema}) returning {retval}")
 		return retval
 
 	def get_primary_key(self, tablename):
@@ -361,7 +349,7 @@ class MsSqlManager(CnxnManager):
 		return candidates
 
 	def get_jdbc_connstr(self):
-		return 'jdbc:sqlserver://%s;database=%s' % (self.host, self.dbname)
+		return 'jdbc:sqlserver://%s;database=%s' % (self.host, self.database)
 
 	def drop_table(self, ts):
 		if self.table_exists(ts):

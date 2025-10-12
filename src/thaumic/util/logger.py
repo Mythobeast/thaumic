@@ -32,9 +32,15 @@ class ConditionalLogger:
 			self.logger.error("Attempt to decrease log_flag_stack below 1")
 
 	def filter(self, tablename):
+		# If the active flag is false, no logging should be done
+		# This is the universal off switch for entering sections that don't
+		# need debugging
+		if not self.active:
+			return False
 
 		# Grab the first frame in the call stack that isn't a function in this file.
 		# This is the calling function
+
 		callstack = traceback.extract_stack()
 		pathname = __name__.replace('.', '/')
 		caller = None
@@ -50,11 +56,6 @@ class ConditionalLogger:
 		# the programmer to get logging only for the tables that they're currently
 		# working with, without too much clutter.
 
-		# If the active flag is false, no logging should be done
-		# This is the universal off switch for entering sections that don't
-		# need debugging
-		if not self.active:
-			return False
 
 		# Put a function in the method whitelist if you're specifically trying to
 		# debug that method.

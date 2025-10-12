@@ -48,10 +48,10 @@ class MsSqlManager(SqlManager):
 			print(f"Failure to connect to database with conn string DSN={self.dsn};UID={self.username};PWD=naestrai")
 			raise ie
 
-	def fetch(self, query, vargs=None, raw=False, retries=0):
+	def fetch(self, query, params=None, raw=False, retries=0):
 		with self.cnxn.cursor() as cursor:
-			if vargs:
-				cursor.execute(query, vargs)
+			if params:
+				cursor.execute(query, params)
 			else:
 				cursor.execute(query)
 			self.rowcount = cursor.rowcount
@@ -60,21 +60,21 @@ class MsSqlManager(SqlManager):
 				retval.append(list(oneitem))
 		return retval
 
-	def execute(self, query, vargs=None):
+	def execute(self, query, params=None):
 		with self.cnxn.cursor() as cursor:
-			if vargs:
-				retval = cursor.execute(query, tuple(vargs))
+			if params:
+				retval = cursor.execute(query, tuple(params))
 			else:
 				retval = cursor.execute(query)
 			self.cnxn.commit()
 			self.rowcount = cursor.rowcount
 		return retval
 
-	def executemany(self, query, vargs):
+	def executemany(self, query, params):
 		self.rowcount = 0
 		with self.cnxn.cursor() as cursor:
-			print(f"Inserting {vargs}")
-			cursor.executemany(query, list(vargs))
+			print(f"Inserting {params}")
+			cursor.executemany(query, list(params))
 			self.rowcount = cursor.rowcount
 			self.cnxn.commit()
 		# return retval

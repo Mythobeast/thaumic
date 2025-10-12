@@ -23,8 +23,9 @@ class CnxnManager:
 		self.encoding = dbspec.get('ENCODING', None)
 		self.enc_ctype = dbspec.get('CTYPE', None)
 		self.debug = dbspec.get('DEBUGME', None)
+		self.odbc_driver = dbspec.get('ODBC_DRIVER', None)
 		if logger is None:
-			logspec = dbspec.get('LOGSPEC')
+			logspec = dbspec.get('LOGSPEC', None)
 			if logspec is None:
 				self.logger = ConditionalLogger(dict())
 			else:
@@ -32,7 +33,7 @@ class CnxnManager:
 		else:
 			self.logger = logger
 
-		self.connection = None
+		self.cnxn = None
 		self.rowcount = -1
 		self.last_query = None
 		self.last_parameters = None
@@ -46,7 +47,7 @@ class CnxnManager:
 		self.close()
 
 	def connect(self):
-		if self.connection and self.connection.connected:
+		if self.cnxn and self.cnxn.connected:
 			return
 		params = []
 		if self.dsn:
@@ -60,10 +61,10 @@ class CnxnManager:
 		params.append(f"PWD={self.pw}")
 
 		connection_string = ';'.join(params)
-		self.connection = pyodbc.connect(connection_string)
-		self.connection.autocommit = self.autocommit
+		self.cnxn = pyodbc.connect(connection_string)
+		self.cnxn.autocommit = self.autocommit
 		if self.encoding or self.enc_ctype:
-			self.connection.setencoding(encoding=self.encoding, ctype=self.enc_ctype)
+			self.cnxn.setencoding(encoding=self.encoding, ctype=self.enc_ctype)
 
 	@classmethod
 	def class_ftn(cls, tableclass):
@@ -71,14 +72,14 @@ class CnxnManager:
 
 	def close(self):
 		''' Close this connection and null out the variable'''
-		if self.connection:
-			self.connection.close()
-		self.connection = None
+		if self.cnxn:
+			self.cnxn.close()
+		self.cnxn = None
 
-	def cnxn(self):
+	def connection(self):
 		''' Get a connected connection object'''
 		self.connect()
-		return self.connection
+		return self.cnxn
 
 	def execute(self, query, params=None, raw=False):
 		self._execute(query, params, raw)
@@ -89,9 +90,9 @@ class CnxnManager:
 		self.last_query = query
 		self.last_parameters = params
 		self.last_rowid = None
-		self.logger.debug(f"{self.__class__.__name__} Executing {query}, {params}")
+		self.logger.debug(f"Class {self.__class__.__name__}, Executing {query}, {params}")
 
-		with self.cnxn().cursor() as cursor:
+		with self.connection().cursor() as cursor:
 			if params:
 				result = cursor.execute(query, params)
 			else:
@@ -106,32 +107,32 @@ class CnxnManager:
 			elif isinstance(result, pyodbc.Cursor):
 				self.rowcount = result.rowcount
 
-	def executemany(self, query, vargs):
+	def executemany(self, query, params):
 		'''In the absence of a universally supported method of running
 		multi-set queries, we have to just iterate through them.'''
-		self.logger.debug("Running executemany: \n%s\n%s" % (query, vargs))
-		with self.cnxn().cursor() as cursor:
-			cursor.executemany(query, vargs)
+		self.logger.debug("Running executemany: \n%s\n%s" % (query, params))
+		with self.connection().cursor() as cursor:
+			cursor.executemany(query, params)
 
-	def fetch(self, query, vargs=None, raw=False, retries=0):
+	def fetch(self, query, params=None, raw=False, retries=0):
 		if not raw:
 			query = self.adjust_quoting(query)
 		retval = None
 		while retries > 0:
 			retries -= 1
-			retval = self._fetch(query, vargs)
+			retval = self._fetch(query, params)
 
 		return retval
 
-	def _fetch(self, query, vargs):
+	def _fetch(self, query, params):
 		self.last_query = query
-		self.last_parameters = vargs
-		self.logger.debug(f"{self.__class__.__name__} fetching {query}, {vargs}")
+		self.last_parameters = params
+		self.logger.debug(f"{self.__class__.__name__}, fetching {query}, {params}")
 
 		retval = []
-		with self.cnxn().cursor() as cursor:
-			if vargs:
-				cursor.execute(query, vargs)
+		with self.connection().cursor() as cursor:
+			if params:
+				cursor.execute(query, params)
 			else:
 				cursor.execute(query)
 			self.rowcount = 0
@@ -186,9 +187,9 @@ class CnxnManager:
 	def recoonnect(self):
 		''' In the event of a connection distruption or a failed query, close and
 		restart the connection '''
-		if self.connection and self.connection.connected:
-			self.connection.close()
-		self.connection = None
+		if self.cnxn and self.cnxn.connected:
+			self.cnxn.close()
+		self.cnxn = None
 		self.connect()
 
 	@staticmethod
