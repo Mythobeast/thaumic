@@ -1,0 +1,33 @@
+
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+requires-python = ">=3.9,<4.0"
+name="thaumic"
+version = "0.0.1"
+readme = "README.md"
+dependencies = [
+    "pyhocon",
+    "pyodbc",
+    "pyparsing",
+    "pytz",
+    "mysql-connector",
+]
+
+authors = [
+    { name = "Robert Rapplean", email = "robert.rapplean@dhha.org"},
+]
+description="Database access tools that focus on dynamically adjusting the schema"
+
+classifiers = [
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]

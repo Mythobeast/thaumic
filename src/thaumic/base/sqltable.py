@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pytz import UTC
 
+from thaumic.base.sqldialect import SQLDialect
 from thaumic.base.sqlfield import fix_field_name
 from thaumic.base.sqlrow import SQLRow
 from thaumic.base.tablespec import TableSpec
@@ -22,12 +23,17 @@ class SQLTable:
 		# SQLField('member_id', 'INT', 1)
 	]
 	CONSTRAINTS = []
+	TS = None
 
-	def __init__(self, ts=None, v=None):
+	def __init__(self, ts=None, v=None, dialect=None):
 		self.ftn = None
-
+		if dialect is None:
+			self.gen = SQLDialect()
+		if self.TS is None:
+			self.TS = TableSpec(self.SCHEMA, self.TABLENAME, self.FIELDLIST)
+			self.TS.ftn = self.gen.fulltablename(self.SCHEMA, self.TABLENAME)
 		if ts is None:
-			self.ts = TableSpec(self.SCHEMA, self.TABLENAME, self.FIELDLIST)
+			self.ts = self.TS
 		else:
 			self.ts = ts
 		self.neuro_insert = 0.0
@@ -37,8 +43,6 @@ class SQLTable:
 			self.v = dict()
 		else:
 			self.v = v
-
-
 
 	def __getattr__(self, item):
 		if item[:2] == 'v_':
@@ -77,13 +81,13 @@ class SQLTable:
 		self.v = dict()
 
 	def fulltablename(self, dbmgr):
-		if self.ftn is None:
-			self.ftn = dbmgr.mk_tablename(self.ts)
-		return self.ftn
+		if self.ts.ftn is None:
+			self.ts.ftn = dbmgr.mk_tablename(self.ts)
+		return self.ts.ftn
 
 	def validate(self, dbmgr):
 		''' Assures that all local fields exist in the databse
-		Will add missing fields,
+		Will add missing fields
 		Does NOT check for type equivalence. (e.g. VARCHAR(20) vs VARCHAR(40) or INT vs BIGINT
 		:param dbmgr: Database manager
 		:returns the list of columns in the database,
@@ -108,7 +112,7 @@ class SQLTable:
 
 		if len(missingfields) > 0:
 			for onefield in missingfields:
-				dbmgr.add_column(onefield)
+				self.add_column(dbmgr, onefield)
 				db_fielddict[onefield.fixedname] = onefield
 		dbmgr.logger.reset_debug()
 
@@ -124,12 +128,13 @@ class SQLTable:
 		dbmgr.execute(self.generate_create(dbmgr))
 
 
-	def truncate_table(self, dbmgr):
-		dbmgr.execute(f"TRUNCATE TABLE {self.ftn};")
+	def truncate(self, dbmgr):
+		dbmgr.execute(self.gen.truncate(self.ts.ftn))
+
 
 	def drop(self, dbmgr):
 		try:
-			dbmgr.execute(f"DROP TABLE {self.ftn};")
+			dbmgr.execute(self.gen.drop(self.ts.ftn))
 		except dbmgr.OperationalError as e:
 			if 'no such table' not in str(e):
 				raise
@@ -137,29 +142,11 @@ class SQLTable:
 	def ensure_thaumkey(self, dbmgr):
 		if len(self.ts.dimensions) == 0:
 			return
-		query = ("select stat.table_schema as database_name, "
-            "stat.table_name, "
-			"stat.index_name,"
-            "group_concat(stat.column_name "
-                "order by stat.seq_in_index separator ', ') as columns, "
-            "tco.constraint_type "
-			"from information_schema.statistics stat "
-			"join information_schema.table_constraints tco "
-                "on stat.table_schema = tco.table_schema "
-                "and stat.table_name = tco.table_name "
-                "and stat.index_name = tco.constraint_name "
-			"where stat.non_unique = 0 "
-                "and stat.table_schema = %s "
-		         "and stat.table_name = %s "
-		         "and stat.index_name like 'thaumkey_%' "
-			"group by stat.table_schema, stat.table_name, "
-		         "stat.index_name, tco.constraint_type "
-			"order by stat.table_schema, stat.table_name; ")
 
-		result = dbmgr.fetch(query, (self.ts.tablename, self.ts.schemaname))
+		result = dbmgr.fetch(self.gen.get_thaumkey_data(), (self.ts.tablename, self.ts.schemaname))
 		if len(result) > 1:
 			for row in result:
-				dbmgr.drop_constraint(row[2])
+				dbmgr.execute(self.gen.drop_constraint(row[2])
 		elif len(result) == 1:
 			therow = result[0]
 			columns = set(therow.columns.split(","))
@@ -183,8 +170,8 @@ class SQLTable:
 		sql = f"ALTER TABLE {self.ftn} ALTER COLUMN {sqlfield.fixedname} {dbmgr.type_declaration(sqlfield.fd)}"
 		dbmgr.execute(sql)
 
-	def drop_constraint(self, constraint_name):
-		raise NotImplementedError
+	def drop_constraint(self, dbmgr, constraint_name):
+		dbmgr.execute(self.gen.drop_constraint(constraint_name))
 
 	def generate_create(self, dbmgr):
 		# self.mktblnm(dbmgr)
@@ -225,6 +212,7 @@ class SQLTable:
 		
 		select_sql, select_values = self.generate_select(dbmgr)
 		response = dbmgr.fetch(select_sql, select_values)
+
 		if len(response) == 0:
 			insert_sql, insert_values = self.generate_insert(dbmgr)
 			dbmgr.execute(insert_sql, insert_values)
@@ -562,19 +550,66 @@ class SQLTable:
 			query.append(f"ORDER BY {sqlorderby}")
 		query = ' '.join(query)
 		try:
-			retval = dbmgr.fetch(query, params)
+			response = dbmgr.fetch(query, params)
 		except dbmgr.ProgrammingError:
 			raise
-		if retform == RETFORM_LIST:
-			return retval
+		if len(response) == 0:
+			return response
+		ret_list = self.format_from_db(dbmgr, response)
 
-		if retform == RETFORM_OBJ or retform == RETFORM_DICT:
-			ret_obj = []
-			for row in retval:
-				holder = SQLRow(self.ts)
-				holder.set_values(row)
-				ret_obj.append(holder)
-			return ret_obj
+		if retform == RETFORM_LIST:
+			return ret_list
+
+		ret_dict = []
+		for row in response:
+			ret_dict.append(self.csv_to_dict(dbmgr, self.ts, row))
+
+		if retform == RETFORM_DICT:
+			return ret_dict
+
+		if retform != RETFORM_OBJ:
+			raise ValueError(f"Unexpected retform {retform}")
+
+		ret_obj = []
+		for row in ret_dict:
+			holder = SQLRow(self.ts)
+			holder.v = row
+			ret_obj.append(holder)
+		return ret_obj
+
+
+	def format_from_db(self, dbmgr, values):
+		''' Presumes a list of values that matches the data types of this table '''
+		if isinstance(values, dict):
+			return self.format_from_dict(dbmgr, values)
+		if isinstance(values, list):
+			if len(values) == 0:
+				return values
+			if isinstance(values[0], list):
+				retval = []
+				for row in values:
+					retval.append(self.format_from_db(dbmgr, row))
+				return retval
+			if len(values) != len(self.ts.fieldnames):
+				raise ValueError('format_from_db: this function requires a list of values '
+				                 'that exactly matches the data types of this table')
+			cursor = 0
+			retval = []
+			while cursor < len(self.ts.fieldnames):
+				fn = self.ts.fieldnames[cursor]
+				retval.append(dbmgr.interpret_from_db(self.ts.f[fn], values[cursor]))
+				cursor += 1
+			return retval
+		raise ValueError('format_from_db: this function requires a list or dictionary of values')
+
+
+	@staticmethod
+	def format_dict_from_db(self, dbmgr, values):
+		retval = dict()
+		for key, value in values.items():
+			if key not in self.ts.f:
+				raise ValueError(f"format_dict_from_db: Field {key} not found in fields {self.ts.fieldnames} for table {self.fulltablename(dbmgr)}")
+			retval[key] = dbmgr.interpret_from_db(self.ts.f[key], value)
 
 		return retval
 
@@ -590,10 +625,7 @@ class SQLTable:
 					self.v[key] = value
 			return
 		elif isinstance(values, list):
-			itr = 0
-			for field in self.ts.fieldnames:
-				self.v[field] = values[itr]
-				itr += 1
+			self.v = self.list_to_dict(self.ts, values)
 
 	def select_objects(self, dbmgr, sqlwhere=None, sqlorderby=None, params=None):
 		return self.select(dbmgr, sqlwhere=sqlwhere,
@@ -652,6 +684,14 @@ class SQLTable:
 			self.neuro_insert += 1
 		elif keyletter == "u":
 			self.neuro_update += 1
+
+	@classmethod
+	def list_to_dict(cls, ts, lst):
+		retval = dict()
+		for cursor in range(len(ts.fieldlist)):
+			fn = ts.fieldnames[cursor]
+			retval[ts.fieldnames[cursor]] = lst[cursor]
+		return retval
 
 # Should be moved to analysis
 

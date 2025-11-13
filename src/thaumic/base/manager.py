@@ -4,8 +4,9 @@
 from datetime import datetime, date, time
 
 import pyodbc
-from thaumic.util.logger import ConditionalLogger
 
+from thaumic.base.sqldialect import SQLGenerator
+from thaumic.util.logger import ConditionalLogger
 
 # noinspection SqlNoDataSourceInspection
 class CnxnManager:
@@ -42,6 +43,7 @@ class CnxnManager:
 		self.ProgrammingError = pyodbc.ProgrammingError
 		self.plhd = "%s"
 		self.dq = '"'
+		self.gen = SQLGenerator()
 
 	def __del__(self):
 		self.close()
@@ -193,27 +195,51 @@ class CnxnManager:
 		self.connect()
 
 	@staticmethod
-	def format_datetime(self, value):
+	def format_datetime_todb(self, value):
 		return value
 
 	@staticmethod
-	def format_timestamp(value):
+	def format_datetime_fromdb(self, value):
+		return value
+
+	@staticmethod
+	def format_timestamp_fromdb(value):
 		if isinstance(value, int) or isinstance(value, float):
 			return value
-		if isinstance(value, date):
+		elif isinstance(value, date):
+			value = datetime.combine(value, time(0, 0, 0))
+		if isinstance(value, datetime):
+			return value.timestamp()
+
+
+	@staticmethod
+	def format_timestamp_todb(value):
+		if isinstance(value, int) or isinstance(value, float):
+			return value
+		elif isinstance(value, date):
 			value = datetime.combine(value, time(0, 0, 0))
 		if isinstance(value, datetime):
 			return value.timestamp()
 
 	@staticmethod
-	def format_value(self, datatype, value):
+	def format_value_to_db(self, datatype, value):
 		if datatype.fd.type_name == 'DATETIME':
-			return self.format_datetime(value)
-		if datatype.fd.type_name == 'TIMESTAMP':
-			return self.format_timestamp(value)
-		if datatype.fd.type_name == 'VARCHAR':
+			return self.format_datetime_todb(value)
+		elif datatype.fd.type_name == 'TIMESTAMP':
+			return self.format_timestamp_todb(value)
+		elif datatype.fd.type_name == 'VARCHAR':
 			value = str(value)
 			if len(value) > datatype.fd.length:
 				value = value[:datatype.fd.length - 3] + '...'
 			return value
+		return value
+
+	@staticmethod
+	def format_value_from_db(self, datatype, value):
+		if datatype.fd.type_name == 'DATETIME':
+			return self.format_datetime_from_db(value)
+		elif datatype.fd.type_name == 'TIMESTAMP':
+			return self.format_timestamp_from_db(value)
+		elif datatype.fd.type_name == 'VARCHAR':
+			value = str(value)
 		return value

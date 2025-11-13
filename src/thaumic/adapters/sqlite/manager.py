@@ -374,8 +374,16 @@ class SqliteManager(CnxnManager):
 			tableclass.ftn = f'"{tableclass.SCHEMA}_{tableclass.TABLENAME}"'
 		return tableclass.ftn
 
+	def interpret_from_db(self, fd, value):
+		''' converts values from the database into a Python type. Usually does nothing,
+		except for fancy types that simple databases doesn't handle well. '''
+		return value
+
+	def interpret_to_db(self, fd, value):
+		''' converts the incomming to a type the database can handle.
+		Usually does nothing, but for datetimes in sqlite, it does the conversion'''
+		return value
 
 	def format_datetime(self, value):
-		if isinstance(value, datetime):
-			return value.isoformat()
+		# Should always receive a date and return that date
 		return value

@@ -10,6 +10,7 @@ class TableSpec:
 		self.schemaname = schemaname
 		self.tablename = tablename
 		self.fieldlist = fieldlist
+		self.ftn = None
 		self.f = dict()
 		self.pk = None
 		# List of all field names
@@ -20,7 +21,7 @@ class TableSpec:
 		self.non_seqids = []
 		self.dimensions = []
 		self.metrics = []
-		for itr in self.fieldlist:
+		for itr in fieldlist:
 			itr.fd.table_owner = schemaname
 			itr.fd.table_name = tablename
 			self.f[itr.fixedname] = itr
@@ -38,8 +39,7 @@ class TableSpec:
 				self.metrics.append(itr.fixedname)
 				self.insert_fields.append(itr.fixedname)
 		self.fieldnames_str = '"%s"' % '","'.join(self.fieldnames)
-		self.nonseqid_str = '"%s]"' % '","'.join(self.non_seqids)
-		self.placeholders = ','.join(['%s'] * len(self.fieldnames))
+		self.nonseqid_str = '"%s"' % '","'.join(self.non_seqids)
 		self.create_query = None
 
 
@@ -49,42 +49,5 @@ class TableSpec:
 		self.pk = self.f[fieldname]
 		self.pk.fd.is_pk = True
 
-
-	def generate_create(self, dbmgr):
-		# self.mktblnm(dbmgr)
-		if self.fieldlist is None:
-			raise NotImplementedError
-		fields = []
-		for itr in self.fieldlist:
-			fields.append(f"[{itr.name}] {dbmgr.type_declaration(itr.fd)}")
-			# if itr.a:
-			# 	fields.append(f"[{itr.fieldname}] {itr.datatype} {itr.attributes}")
-			# else:
-			# 	fields.append(f"[{itr.fieldname}] {itr.datatype}")
-
-		holder = [
-			"CREATE TABLE",
-#			self.sql_create_if_not_exists(),
-			self.fulltablename(dbmgr),
-			"(", ",".join(fields), ")"
-		]
-		return " ".join(holder)
-
-	def validate_fields(self, dbmgr):
-		columndetails = dbmgr.get_column_details(self.tablename, self.schema)
-		columns = dict()
-		for onecolumn in columndetails:
-			columns[fix_field_name(onecolumn['COLUMN_NAME'])] = onecolumn
-		missingfields = []
-		for onefield in self.fieldlist:
-			if onefield.fixedname not in columns:
-				missingfields.append(onefield)
-		if len(missingfields) == 0:
-			return True
-		for onefield in missingfields:
-			self.add_column(dbmgr, onefield)
-
-	def add_column(self, dbmgr, fielddef):
-		# self.mktblnm(dbmgr)
-		sql = f"ALTER TABLE {self.fulltablename(dbmgr)} ADD {fielddef.fixedname} {dbmgr.type_declaration(fielddef.fd)}"
-		dbmgr.execute(sql)
+	def has_pk(self):
+		return self.pk is not None
