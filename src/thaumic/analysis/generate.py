@@ -3,8 +3,8 @@
 import sys
 
 from pyhocon import ConfigFactory
-from thaumic.mssql.dbschema import DbSchema
-from thaumic.mssql.manager import getpersonal
+from thaumic.adapters.mssql.dbschema import DbSchema
+from thaumic.adapters.mssql.manager import getpersonal
 
 
 def main():

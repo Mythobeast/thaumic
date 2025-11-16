@@ -1,5 +1,5 @@
 
-from thaumic.mssql.dbschema import DbSchema
+from thaumic.adapters.mssql.dbschema import DbSchema
 
 
 def load_tabledefs(dbspec):

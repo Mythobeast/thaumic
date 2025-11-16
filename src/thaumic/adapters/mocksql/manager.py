@@ -23,17 +23,19 @@ class MockSqlManager(CnxnManager):
 		self.params = None
 		self.plhd = '%s'
 
-	def execute(self, query, params=None):
+	def execute(self, query, params=None, raw=False):
 		self.executed = query
 		self.params = params
 
-	def executemany(self, query, params):
+	def executemany(self, query, params, raw=False):
 		self.executed = query
 		self.params = params
 
+	# noinspection PyUnusedLocal,PyMethodMayBeStatic
 	def schema_exists(self, schema):
 		return True
 
+	# noinspection PyUnusedLocal,PyMethodMayBeStatic
 	def create_schema(self, schemaname):
 		return True
 

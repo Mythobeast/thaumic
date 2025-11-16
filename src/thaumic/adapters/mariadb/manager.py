@@ -2,18 +2,16 @@
 
 from sys import platform
 from thaumic.base.manager import CnxnManager
-from thaumic.typemappings.fielddata import PARAMLESS_TYPES, CHAR_TYPES, FLOAT_TYPES, DECIMAL_TYPES
+from thaumic.base.typemappings import PARAMLESS_TYPES, CHAR_TYPES, FLOAT_TYPES, DECIMAL_TYPES
 
 
 if platform == "linux" or platform == "linux2":
+	# noinspection PyUnresolvedReferences
 	import MySQLdb as sql
-	from mysql.connector import errorcode
-	from MySQLdb._exceptions import OperationalError
 elif platform == "darwin":
 	# OS X
+	# noinspection PyUnresolvedReferences
 	import pymysql as sql
-#	import MySQLdb as sql
-#	from MySQLdb._exceptions import OperationalError
 elif platform == "win32":
 	# Windows...
 	pass
@@ -57,10 +55,10 @@ class MySqlManager(CnxnManager):
 		if self.cnxn:
 			self.cnxn.close()
 
-		print(f"Connecting to {self.host}/{self.dbname} as {self.username}:{self.password}")
+		print(f"Connecting to {self.host}/{self.database} as {self.user}:{self.pw}")
 		try:
-			self.cnxn = sql.connect(user=self.username, password=self.password,
-										host=self.host, database=self.dbname)
+			self.cnxn = sql.connect(user=self.user, password=self.pw,
+										host=self.host, database=self.database)
 #		except OperationalError as oper:
 #			if self.debug:
 #				print(f"Operational error: Something is wrong with your user name or password: {oper}")
@@ -160,6 +158,7 @@ class MySqlManager(CnxnManager):
 	def refresh_schemacache(self):
 		pass
 
+	# noinspection PyUnusedLocal,PyMethodMayBeStatic
 	def schema_exists(self, schema):
 		''' MariaDB has no concept of schema, so this driver simulates it
 		 by adjusting table names.
@@ -167,6 +166,7 @@ class MySqlManager(CnxnManager):
 		 '''
 		return True
 
+	# noinspection PyUnusedLocal,PyMethodMayBeStatic
 	def create_schema(self, schemaname):
 		return True
 
@@ -179,7 +179,7 @@ class MySqlManager(CnxnManager):
 		return rowcount
 
 	def table_exists(self, ts):
-		fulltablename = self.mk_tablename(ts).replace('`', '')
+		fulltablename = ts.ftn.replace('`', '')
 		self.logger.debug(f"Checking if {fulltablename} exists")
 		tablelist = self.fetch("show tables;")
 		for itr in tablelist:
@@ -188,7 +188,7 @@ class MySqlManager(CnxnManager):
 			self.logger.debug(f"{fulltablename} not found in tablelist")
 		return False
 
-	def list_tables(self):
+	def list_tables(self, schema=None):
 		alltables = self.fetch("show tables;")
 		retval = []
 		for onetable in alltables:
@@ -217,7 +217,6 @@ class MySqlManager(CnxnManager):
 	def get_columns(self, ts):
 		''' Output should be equivalent to the output from sp_columns
 		'''
-		fulltablename = self.mk_tablename(ts).replace('`', '')
 
 		sql = [
 			"SELECT "
@@ -240,7 +239,7 @@ class MySqlManager(CnxnManager):
 			"ORDINAL_POSITION,",
 			"IS_NULLABLE, 0",
 			" FROM INFORMATION_SCHEMA.columns ",
-			f"where table_name='{fulltablename}';"]
+			f"where table_name='{self.gen.ftn}';"]
 		sqltxt = ' '.join(sql)
 		self.logger.debug(f"Running {sqltxt}")
 		retval = self.fetch(sqltxt)
@@ -249,9 +248,9 @@ class MySqlManager(CnxnManager):
 
 	def get_jdbc_connstr(self):
 		if self.port == 3306:
-			return f'jdbc:mariadb://{self.host}/{self.dbname}'
+			return f'jdbc:mariadb://{self.host}/{self.database}'
 		else:
-			return f'jdbc:mariadb://{self.host}:{self.port}/{self.dbname}'
+			return f'jdbc:mariadb://{self.host}:{self.port}/{self.database}'
 
 	def drop_table(self, ts):
 		if self.table_exists(ts):
@@ -285,11 +284,7 @@ class MySqlManager(CnxnManager):
 		return f"[{schema}].[{sqlfield.fd.table_name}]"
 
 	@classmethod
-	def sql_create_if_not_exists(cls, ts):
-		return f"CREATE TABLE IF NOT EXISTS"
-
-	@classmethod
-	def type_declaration(self, fd):
+	def type_declaration(cls, fd):
 		tn_upper = fd.type_name.upper()
 		parts = tn_upper.split()
 		typename = parts[0]

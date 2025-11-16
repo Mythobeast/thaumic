@@ -1,8 +1,8 @@
-import math
 from datetime import datetime
 
-from thaumic.typemappings.fielddata import (FieldData, ODBC_DATATYPES, CHAR_TYPES,
-                                                FLOAT_TYPES, INTEGER_TYPES,	TIME_TYPES)
+from thaumic.base.typemappings import (CHAR_TYPES,
+                                    FLOAT_TYPES, INTEGER_TYPES, TIME_TYPES)
+from thaumic.base.fielddata import FieldData
 
 
 # Replaces all non-alphanumeric characters to underscores

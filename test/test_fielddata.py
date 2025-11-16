@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from thaumic.typemappings.fielddata import FieldData, extract_params
+from thaumic.base.fielddata import FieldData, extract_params
 
 testsql = ["""drop table testtable;
 

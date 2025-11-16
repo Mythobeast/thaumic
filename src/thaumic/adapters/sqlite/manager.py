@@ -1,15 +1,13 @@
-from datetime import datetime
-
 import sqlite3
 
-
+from thaumic.adapters.sqlite.sqlitedialect import SqliteDialect
 from thaumic.base.manager import CnxnManager
-from thaumic.typemappings.fielddata import CHAR_TYPES, FLOAT_TYPES, DECIMAL_TYPES, INTEGER_TYPES, \
+from thaumic.base.typemappings import CHAR_TYPES, FLOAT_TYPES, DECIMAL_TYPES, INTEGER_TYPES, \
 	TIME_TYPES
 from thaumic.adapters.sqlite.fielddata import DATATYPES
-import thaumic.typemappings.fielddata as fd
-import thaumic.base.exceptions as thaumex
+from thaumic.base.fielddata import FieldData
 
+import thaumic.base.exceptions as thaumex
 
 DB_INST = None
 DEBUG = False
@@ -18,47 +16,22 @@ MAX_SYSNAME_LEN = 2000
 def getinstance(spec_in, logger=None):
 	return SqliteManager(spec_in, logger)
 
-def chop(name, maxlen):
-	if len(name) <= maxlen:
-		return name
-	return name[:maxlen]
-
-def make_obname(namelist, maxlen):
-	retval = '_'.join(namelist)
-	if len(retval) <= maxlen:
-		return retval
-	maxsub = 0
-	for name in namelist:
-		if len(name) > maxsub:
-			maxsub = len(name)
-	while len(retval) > maxlen:
-		maxsub -= 1
-		newlist = [chop(name, maxsub) for name in namelist]
-		retval = '_'.join(newlist)
-	return retval
-
 
 # noinspection PyAbstractClass
 class SqliteManager(CnxnManager):
-	auto_increment = 'AUTOINCREMENT'
-	plhd = '?'
-	id_quote = '"'
-
-
 	def __init__(self, dbspec, logger=None):
 		super().__init__(dbspec, logger)
 #		self.debug = True
 		self.engine = 'sqlite'
 		self.dbfile = dbspec.get('DBFILE', None)
 		self.authentication = dbspec.get('AUTHENTICATION', None)
-		self.auto_increment = 'AUTOINCREMENT'
-		self.plhd = '?'
 		self.cnxn = None
 		self.OperationalError = sqlite3.OperationalError
 		self.IntegrityError = sqlite3.IntegrityError
 		self.ProgrammingError = sqlite3.ProgrammingError
 		self.BaseError = sqlite3.Error
 		self.connect()
+		self.gen = SqliteDialect()
 
 	def cnx(self):
 		if self.cnxn is None:
@@ -200,6 +173,7 @@ class SqliteManager(CnxnManager):
 	def refresh_schemacache(self):
 		pass
 
+	# noinspection PyUnusedLocal,PyMethodMayBeStatic
 	def schema_exists(self, schema):
 		''' MariaDB has no concept of schema, so this driver simulates it
 		 by adjusting table names.
@@ -207,7 +181,7 @@ class SqliteManager(CnxnManager):
 		 '''
 		return True
 
-	# noinspection PyMethodMayBeStatic
+	# noinspection PyMethodMayBeStatic,PyUnusedLocal
 	def create_schema(self, schemaname):
 		return True
 
@@ -221,17 +195,11 @@ class SqliteManager(CnxnManager):
 		return rowcount
 
 	def table_exists(self, ts):
-		fulltablename = self.mk_tablename(ts).strip('"')
-		if self.debug:
-			print(f"Checking if {fulltablename} exists")
-		tablelist = self.fetch(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{fulltablename}';")
-		for itr in tablelist:
-			if fulltablename == itr[0].lower():
-				return True
-		if self.debug:
-			print(f"{fulltablename} not found in tablelist")
-		return False
+		sql = self.gen.table_exists(ts)
+		tablelist = self.fetch(sql, [ts.ftn])
+		return len(tablelist) > 0
 
+	# noinspection PyUnusedLocal,PyMethodMayBeStatic
 	def ensure_thaumkey(self, ts):
 		return True
 
@@ -242,14 +210,8 @@ class SqliteManager(CnxnManager):
 		raise ValueError("SQLite does not support drop constraints")
 
 	def list_tables(self, schema=None):
-		alltables = self.fetch("SELECT name FROM sqlite_schema "
-				"WHERE type ='table' AND " 
-                "name NOT LIKE 'sqlite_%';")
-		retval = []
-		for onetable in alltables:
-			if onetable[1] == self.schema:
-				retval.append(onetable[2])
-		return retval
+		tablelist = self.fetch(self.gen.list_tables(schema))
+		return [x[0] for x in tablelist]
 
 	COLUMNLIST_FIELDS = ["TABLE_CATALOG", "TABLE_SCHEMA", "TABLE_NAME",
 			"COLUMN_NAME", "nonse", "DATA_TYPE", "NUMERIC_PRECISION",
@@ -271,11 +233,11 @@ class SqliteManager(CnxnManager):
 			print(f"get_column_details({ts.tablename}, {ts.schemaname}) returning {retval}")
 		return retval
 
-	def get_columns(self, ts):
+	def get_column_list(self, ts):
 		''' Output should be equivalent to the output from sp_columns
 		'''
-		fulltablename = self.mk_tablename(ts).strip('"')
-		sql = f'PRAGMA table_info({fulltablename});'
+
+		sql = f'PRAGMA table_info({ts.ftn});'
 
 		sqltxt = sql
 		# if self.debug:
@@ -286,25 +248,22 @@ class SqliteManager(CnxnManager):
 		ordinal = 0
 		for row in results:
 			newrow = DATATYPES[row[2]][:]
-			newrow[fd.C_TABLE_SCHEMA] = ts.schemaname.strip('"')
-			newrow[fd.C_TABLE_NAME]   = ts.tablename.strip('"')
-			newrow[fd.C_COLUMN_NAME]  = row[1] # columnname
-			newrow[fd.C_DATA_TYPE]    = row[2] # datatype
-			newrow[fd.C_IS_NULLABLE]  = row[3] == 0 # notnull
-			newrow[fd.C_COLUMN_DEFAULT] = row[4] # default
-			newrow[fd.C_ORDINAL_POSITION] = ordinal
+			newrow[FieldData.C_TABLE_SCHEMA] = ts.schemaname.strip('"')
+			newrow[FieldData.C_TABLE_NAME]   = ts.tablename.strip('"')
+			newrow[FieldData.C_COLUMN_NAME]  = row[1] # columnname
+			newrow[FieldData.C_DATA_TYPE]    = row[2] # datatype
+			newrow[FieldData.C_IS_NULLABLE]  = row[3] == 0 # notnull
+			newrow[FieldData.C_COLUMN_DEFAULT] = row[4] # default
+			newrow[FieldData.C_ORDINAL_POSITION] = ordinal
 			ordinal += 1
 			retval.append(newrow)
-		table_info_header = ["name", "type", "notnull", "dflt_value", "pk"]
+		# table_info_header = ["name", "type", "notnull", "dflt_value", "pk"]
 
 		return retval
 
 	def get_jdbc_connstr(self):
 		return f'jdbc:sqlite:{self.dbfile}'
 
-	def drop_table(self, ts):
-		if self.table_exists(ts):
-			self.execute(f"DROP TABLE {ts.schemaname}_{ts.tablename};")
 
 	def adjust_quoting(self, query):
 		query = query.replace('[', '"')
@@ -326,21 +285,6 @@ class SqliteManager(CnxnManager):
 		sql = self.adjust_quoting(sql)
 		self.execute(sql)
 
-	@classmethod
-	def mk_tablename(cls, ts):
-		return f'"{ts.schemaname}_{ts.tablename}"'
-
-	@classmethod
-	def tablename_from_sqlfield(cls, sqlfield):
-		if sqlfield.fd.table_owner is None or sqlfield.fd.table_owner == '':
-			schema = 'dbo'
-		else:
-			schema = sqlfield.fd.table_owner
-		return f'"{schema}_{sqlfield.fd.table_name}"'
-
-	@classmethod
-	def sql_create_if_not_exists(cls, ts):
-		return f"CREATE TABLE IF NOT EXISTS"
 
 	@classmethod
 	def type_declaration(cls, fd):
@@ -368,22 +312,19 @@ class SqliteManager(CnxnManager):
 
 		return ' '.join(retval)
 
-	@classmethod
-	def class_ftn(cls, tableclass):
-		if tableclass.ftn is None:
-			tableclass.ftn = f'"{tableclass.SCHEMA}_{tableclass.TABLENAME}"'
-		return tableclass.ftn
-
+	# noinspection PyMethodMayBeStatic,PyUnusedLocal
 	def interpret_from_db(self, fd, value):
 		''' converts values from the database into a Python type. Usually does nothing,
 		except for fancy types that simple databases doesn't handle well. '''
 		return value
 
+	# noinspection PyMethodMayBeStatic,PyUnusedLocal
 	def interpret_to_db(self, fd, value):
 		''' converts the incomming to a type the database can handle.
 		Usually does nothing, but for datetimes in sqlite, it does the conversion'''
 		return value
 
+	# noinspection PyMethodMayBeStatic
 	def format_datetime(self, value):
 		# Should always receive a date and return that date
 		return value

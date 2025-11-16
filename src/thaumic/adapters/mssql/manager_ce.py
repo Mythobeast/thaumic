@@ -1,6 +1,7 @@
-
+# noinspection PyUnresolvedReferences,PyPackageRequirements
 import ceODBC
 
+from thaumic.base.exceptions import IntegrityError
 from thaumic.base.manager import CnxnManager
 
 DB_INST = None
@@ -18,9 +19,10 @@ def getpersonal(spec_in, logger=None):
 	return MsSqlManager(spec_in, logger)
 
 
-class MsSqlManager(SqlManager):
+class MsSqlManager(CnxnManager):
 	def __init__(self, dbspec, logger=None):
 		super().__init__(dbspec, logger)
+		self.rowcount = None
 		self.engine = 'mssql'
 		self.auto_increment = 'IDENTITY(1,1)'
 		self.cnxn = None
@@ -32,7 +34,7 @@ class MsSqlManager(SqlManager):
 
 		# print(f"Connecting to DSN={self.dsn};UID={self.username};PWD=naestrai")
 		try:
-			self.cnxn = ceODBC.connect(f'DSN={self.dsn};UID={self.username};PWD={self.password};DATABASE={self.dbname}',
+			self.cnxn = ceODBC.connect(f'DSN={self.dsn};UID={self.user};PWD={self.pw};DATABASE={self.database}',
 			                           autocommit=False)
 			# alternative:
 			# self.cnxn = ceODBC.connect(
@@ -45,7 +47,7 @@ class MsSqlManager(SqlManager):
 			# 	driver='/usr/local/lib/libtdsodbc.so'
 			# )
 		except ceODBC.InterfaceError as ie:
-			print(f"Failure to connect to database with conn string DSN={self.dsn};UID={self.username};PWD=naestrai")
+			print(f"Failure to connect to database with conn string DSN={self.dsn};UID={self.user};PWD=naestrai")
 			raise ie
 
 	def fetch(self, query, params=None, raw=False, retries=0):
@@ -60,7 +62,7 @@ class MsSqlManager(SqlManager):
 				retval.append(list(oneitem))
 		return retval
 
-	def execute(self, query, params=None):
+	def execute(self, query, params=None, raw=False, retries=0):
 		with self.cnxn.cursor() as cursor:
 			if params:
 				retval = cursor.execute(query, tuple(params))
@@ -81,13 +83,13 @@ class MsSqlManager(SqlManager):
 
 
 	def schema_exists(self, schemaname):
-		schemalist = self.fetch("SELECT * FROM sys.schemas WHERE name='{schemaname}'")
+		schemalist = self.fetch(f"SELECT * FROM sys.schemas WHERE name='{schemaname}'")
 		return len(schemalist) > 0
 
 	def create_schema(self, schemaname):
 		try:
 			self.execute(f"CREATE SCHEMA {schemaname}")
-		except:
+		except IntegrityError as ie:
 			return
 
 	def get_rowcount(self, ts):
@@ -100,14 +102,15 @@ class MsSqlManager(SqlManager):
 		print(f"Dropping table [{ts.schemaname}].[{ts.tablename}]")
 		self.execute(sql)
 
+
 	def table_exists(self, ts):
 		sql = f"SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='{ts.schemaname}' AND TABLE_NAME = '{ts.tablename}'"
 		tablelist = self.fetch(sql)
 		return len(tablelist) > 0
 
-	def list_tables(self):
+	def list_tables(self, schema=None):
 		# alltables = self.fetch("SELECT * FROM %s.INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'" % self.dbname)
-		alltables = self.fetch("SELECT * FROM %s.INFORMATION_SCHEMA.TABLES" % self.dbname)
+		alltables = self.fetch("SELECT * FROM %s.INFORMATION_SCHEMA.TABLES" % self.database)
 		retval = []
 		for onetable in alltables:
 			if onetable[1] == self.schema:
@@ -131,8 +134,6 @@ class MsSqlManager(SqlManager):
 		return retval
 
 	def get_columns(self, ts):
-		if schema is None:
-			schema = self.schema
 		sql = [
 			"SELECT "
 			"TABLE_CATALOG,",
@@ -155,7 +156,7 @@ class MsSqlManager(SqlManager):
 			"IS_NULLABLE, 0",
 			" FROM INFORMATION_SCHEMA.columns ",
 			f"where table_name='{ts.tablename}' ",
-			f"and table_schema='{schema}';"]
+			f"and table_schema='{ts.schemaname}';"]
 		retval = self.fetch(" ".join(sql))
 		return retval
 
@@ -197,11 +198,7 @@ class MsSqlManager(SqlManager):
 		return candidates
 
 	def get_jdbc_connstr(self):
-		return 'jdbc:sqlserver://%s;database=%s' % (self.host, self.dbname)
-
-	def drop_table(self, ts):
-		if self.table_exists(ts):
-			self.execute(f"DROP TABLE {ts.schemaname}.{ts.tablename}")
+		return 'jdbc:sqlserver://%s;database=%s' % (self.host, self.database)
 
 	def adjust_quoting(self, query):
 		query = query.replace('%s', '?')

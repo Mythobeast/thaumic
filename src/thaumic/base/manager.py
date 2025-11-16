@@ -5,8 +5,11 @@ from datetime import datetime, date, time
 
 import pyodbc
 
-from thaumic.base.sqldialect import SQLGenerator
+from thaumic.base.sqldialect import SQLDialect
 from thaumic.util.logger import ConditionalLogger
+
+def getinstance():
+	raise NotImplementedError()
 
 # noinspection SqlNoDataSourceInspection
 class CnxnManager:
@@ -43,7 +46,7 @@ class CnxnManager:
 		self.ProgrammingError = pyodbc.ProgrammingError
 		self.plhd = "%s"
 		self.dq = '"'
-		self.gen = SQLGenerator()
+		self.gen = SQLDialect()
 
 	def __del__(self):
 		self.close()
@@ -167,19 +170,14 @@ class CnxnManager:
 
 	def list_tables(self, schema=None):
 		''' This is the ansi-standard way to get a list of tables in a database.'''
-		query = ("SELECT TABLE_NAME FROM \"INFORMATION_SCHEMA\".\"TABLES\" "
-		         "WHERE TABLE_TYPE='BASE TABLE' ")
-		if schema:
-			query += f" AND TABLE_SCHEMA = '{schema}'"
-		alltables = self.fetch(query)
 
-		retval = []
-		for row in alltables:
-			retval.append(row[0])
+		alltables = self.fetch(self.gen.list_tables(schema=schema))
+
+		retval = [x[0] for x in alltables]
 		return retval
 
 	def drop_constraint(self, table_name, constraint_name):
-		query = "ALTER TABLE %s DROP CONSTRAINT %s"
+		query = self.gen.drop_constraint(table_name, constraint_name)
 		self.execute(query, (table_name, constraint_name))
 
 	def debug_out(self, message):
@@ -194,12 +192,12 @@ class CnxnManager:
 		self.cnxn = None
 		self.connect()
 
-	@staticmethod
-	def format_datetime_todb(self, value):
+	@classmethod
+	def format_datetime_todb(cls, value):
 		return value
 
-	@staticmethod
-	def format_datetime_fromdb(self, value):
+	@classmethod
+	def format_datetime_fromdb(cls, value):
 		return value
 
 	@staticmethod
@@ -210,7 +208,6 @@ class CnxnManager:
 			value = datetime.combine(value, time(0, 0, 0))
 		if isinstance(value, datetime):
 			return value.timestamp()
-
 
 	@staticmethod
 	def format_timestamp_todb(value):

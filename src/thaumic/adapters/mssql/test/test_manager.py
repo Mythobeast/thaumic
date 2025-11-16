@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from thaumic.mssql.manager import MsSqlManager
-from thaumic.typemappings.fielddata import FieldData
+from thaumic.adapters.mssql.manager import MsSqlManager
+from thaumic.base.fielddata import FieldData
 
 
 class Test_DBManager(TestCase):

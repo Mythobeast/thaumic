@@ -1,8 +1,7 @@
 from unittest import TestCase
 
 from thaumic.base.sqlfield import SQLField
-from thaumic.typemappings.fielddata import (FieldData, ODBC_DATATYPES, CHAR_TYPES,
-                                                FLOAT_TYPES, INTEGER_TYPES,	TIME_TYPES)
+from thaumic.base.fielddata import (FieldData)
 
 
 # Replaces all non-alphanumeric characters to underscores

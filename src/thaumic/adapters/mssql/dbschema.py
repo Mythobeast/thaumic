@@ -1,4 +1,4 @@
-from thaumic.mssql.sqltable import MsSQLTable
+from thaumic.adapters.mssql.sqltable import MsSQLTable
 
 TODOLIST = ['Personnel', 'Response_Master_Incident', 'Response_Vehicles_Assigned']
 
@@ -12,7 +12,7 @@ class DbSchema:
 		print(f"Found {len(retval)} tables")
 
 		for row in retval:
-			database, schema, tablename, type = row
+			database, schema, tablename, _ = row
 			if tablename not in TODOLIST:
 				continue
 			self.tables[tablename.lower()] = MsSQLTable(tablename=tablename, schema=schema)

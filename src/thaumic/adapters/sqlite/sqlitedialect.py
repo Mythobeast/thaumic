@@ -1,31 +1,18 @@
-#from xxsubtype import bench
+from thaumic.base.sqldialect import SQLDialect
 from thaumic.base.typemappings import DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, \
 	PARAMLESS_TYPES
 from thaumic.base.exceptions import IntegrityError
 
 
-class SQLDialect:
-	PLHD = '?'
-	IQO = '"'  # Identifier quote open
-	IQC = '"'  # Identifier quote close
-	TYPESPEC = None
-	AUTOINCREMENT = 'AUTO_INCREMENT'
-	PRIMARYKEY = 'PRIMARY KEY'
+class SqliteDialect(SQLDialect):
 
 	@classmethod
 	def fulltablename(cls, schema, tablename):
-		return f'{cls.IQO}{schema}{cls.IQC}.{cls.IQO}{tablename}{cls.IQC}'
+		return f'{cls.IQO}{schema}_{tablename}{cls.IQC}'
 
 	@classmethod
 	def table_exists(cls, ts):
-		sql = ("select stat.table_schema as database_name, "
-            "stat.table_name, "
-            "from information_schema.statistics stat "
-            f"and stat.table_schema = {cls.PLHD} "
-            f"and stat.table_name = {cls.PLHD} "
-            "group by stat.table_schema, stat.table_name, "
-            "order by stat.table_schema, stat.table_name; ")
-		return sql, [ts.schemaname, ts.tablename]
+		return f"SELECT name FROM sqlite_master WHERE type='table' AND name={cls.PLHD}"
 
 	@classmethod
 	def get_field_list(cls, ts):
@@ -62,13 +49,13 @@ class SQLDialect:
 
 	@classmethod
 	def list_tables(cls, schema=None):
-		''' This is the ansi-standard way to get a list of tables in a database.'''
-		query = (f"SELECT {cls.IQO}table_name{cls.IQC} FROM {cls.IQO}information_schema{cls.IQC}.{cls.IQO}tables{cls.IQC} "
-		         f"WHERE {cls.IQO}table_type{cls.IQC}='BASE TABLE'")
+		query = [f"SELECT {cls.IQO}name{cls.IQC} FROM {cls.IQO}sqlite_schema{cls.IQC} ",
+				f"WHERE {cls.IQO}type{cls.IQC}='table' AND "]
 		if schema:
-			query += f" AND {cls.IQO}table_schema{cls.IQC} = '{schema}'"
-		query += f" GROUP BY {cls.IQO}table_name{cls.IQC}"
-		return query
+			query.append(f"{cls.IQO}name{cls.IQC} LIKE '{schema}_%'")
+		else:
+			query.append(f"{cls.IQO}name{cls.IQC} NOT LIKE 'sqlite_%'")
+		return ' '.join(query)
 
 	@classmethod
 	def create_table(cls, ts):
@@ -139,11 +126,11 @@ class SQLDialect:
 					typename = f'DECIMAL({fd.precision},{fd.scale})'
 
 		retval = [typename]
-		if cls.AUTOINCREMENT in tn_upper or 'IDENTITY' in tn_upper or fd.autoinc_seed is not None:
+		if 'AUTO_INCREMENT' in tn_upper or 'IDENTITY' in tn_upper or fd.autoinc_seed is not None:
 			retval.append('AUTO_INCREMENT')
 
 		if fd.is_pk:
-			retval.append(cls.PRIMARYKEY)
+			retval.append('PRIMARY KEY')
 
 		return ' '.join(retval)
 

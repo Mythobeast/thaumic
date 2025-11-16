@@ -1,8 +1,6 @@
 ''' A tablespec object stores the names and column listing of a table.
 '''
 
-from thaumic.base.sqlfield import fix_field_name
-
 
 class TableSpec:
 	def __init__(self, schemaname, tablename, fieldlist):

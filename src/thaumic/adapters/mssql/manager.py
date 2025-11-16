@@ -2,8 +2,10 @@ import pyodbc
 import time
 
 from thaumic.base.manager import CnxnManager
-from thaumic.typemappings.fielddata import FieldData, DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, \
+from thaumic.base.typemappings import DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, \
 	PARAMLESS_TYPES
+
+from thaumic.base.fielddata import FieldData
 
 DB_INST = None
 DEBUG = False
@@ -148,11 +150,6 @@ class MsSqlManager(CnxnManager):
 	def rollback(self):
 		self.cnxn.rollback()
 
-	def mk_tablename(self, ts):
-		if ts.schemaname is None or ts.schemaname == '':
-			ts.schemaname = 'dbo'
-		return f'[{ts.schemaname}].[{ts.tablename}]'.lower()
-
 	def refresh_schemacache(self):
 		now = int(time.time())
 		if now - self.lastcachecheck < 300:
@@ -188,9 +185,10 @@ class MsSqlManager(CnxnManager):
 		try:
 			self.execute(f"CREATE SCHEMA {schemaname}")
 			self.schemacache[schemaname] = SchemaCache(schemaname)
-		except:
+		except pyodbc.IntegrityError as ie:
 			return
 
+	# noinspection PyUnusedLocal
 	def add_unique_constraint(self, schemaname, tablename, column_list, constraintname = None):
 		columns_with_underscore = '_'.join(column_list)
 		columns_with_comma = ','.join(column_list)
@@ -402,7 +400,7 @@ class MsSqlManager(CnxnManager):
 		return f"IF NOT (EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{ts.schemaname}' AND  TABLE_NAME = '{ts.tablename}')) CREATE TABLE"
 
 	@classmethod
-	def type_declaration(self, fd):
+	def type_declaration(cls, fd):
 		tn_upper = fd.type_name.upper()
 		parts = tn_upper.split()
 		typename = parts[0]

@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from thaumic.typemappings.fielddata import CHAR_TYPES
+from thaumic.base.typemappings import CHAR_TYPES
 
 DEFAULT_DELIMITER = '\\t'
 
@@ -21,6 +21,7 @@ class BcpNativeField:
 			self.coalation = '""'
 
 	def output(self):
+		# noinspection PyUnusedLocal
 		example = ('1       SQLCHAR             0       7       ","    1     '
 		           '_Action                                                                          '
 		           'SQL_Latin1_General_CP1_CI_AS'
@@ -69,6 +70,7 @@ def generate_bcp_format_xml(sqltable, columnlist):
 	if len(columnname_copy) > 0:
 		raise ValueError(f'Leftover columns: {columnname_copy}')
 
+	# noinspection HttpUrlsUsage
 	retval = ['<?xml version="1.0"?>',
 	          '<BCPFORMAT xmlns="http://schemas.microsoft.com/sqlserver/2004/bulkload/format" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
 	          '<RECORD>'

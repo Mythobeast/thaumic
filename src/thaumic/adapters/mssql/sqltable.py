@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from thaumic.base.sqltable import SQLTable
-from thaumic.mssql.sqlfield import MsSQLField
-from thaumic.typemappings.fielddata import FieldData
+from thaumic.adapters.mssql.sqlfield import MsSQLField
+from thaumic.base.fielddata import FieldData
 
 SP_FORMAT_OUTPUT = 1
 
@@ -37,6 +37,7 @@ def gen_column_defs(headerrow, linenumberoffset):
 class MsSQLTable(SQLTable):
 
 	def __init__(self, tablename=None, schema=None):
+		super().__init__(self, ts=None, v=None, dialect=None)
 		if tablename is not None:
 			self.TABLENAME = tablename
 		if schema is not None:
@@ -45,21 +46,13 @@ class MsSQLTable(SQLTable):
 
 	def load_from_database(self, dbmgr):
 		columnlist = dbmgr.get_columns(self.TABLENAME)
-		self.f = dict()
+		self.ts.f = dict()
 		for onefield in columnlist:
 			fd = FieldData(onefield)
 			self.f[fd.column_name] = MsSQLField(fd)
 		pk_result = dbmgr.get_primary_key(self.TABLENAME)
 		if pk_result is not None:
 			self.set_primary_key(pk_result)
-
-	def addcolumn(self, fs):
-		thisfield =  MsSQLField(fs)
-		self.f[fs.column_name] = thisfield
-		self.all_fields.append(thisfield)
-		self.insert_fields.append(thisfield.fixedname)
-		self.metrics.append(thisfield.fixedname)
-		self.fieldnames_str = "[%s]" % '],['.join(self.all_fields)
 
 
 	@classmethod
@@ -113,12 +106,9 @@ class MsSQLTable(SQLTable):
 	def generate_python(self, dbmgr, filename):
 		filepath = Path(filename)
 		filepath.parent.mkdir(parents=True, exist_ok=True)
-		fieldnamelist = list(self.f.keys())
-		anyfield = self.f[fieldnamelist[0]]
-		database = anyfield.fd.table_qualifier
 
 		outfile = open(filename, 'w')
-		outfile.write("from thaumic.base.sqltable import SQLTable, SQLField\n\n");
+		outfile.write("from thaumic.base.sqltable import SQLTable, SQLField\n\n")
 
 		outfile.write(f"class {self.TABLENAME.capitalize()}(SQLTable):\n")
 		outfile.write(f"\tTABLENAME = '{self.TABLENAME}'\n")
@@ -139,8 +129,9 @@ class MsSQLTable(SQLTable):
 		outfile.write("\n")
 		outfile.close()
 
+	# noinspection PyMethodMayBeStatic
 	def retrieve_constraints(self):
-		sql = """
+		return """
 select table_view,
        object_type, 
        constraint_type,

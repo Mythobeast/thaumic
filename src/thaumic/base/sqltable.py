@@ -30,8 +30,11 @@ class SQLTable:
 		if dialect is None:
 			self.gen = SQLDialect()
 		if self.TS is None:
-			self.TS = TableSpec(self.SCHEMA, self.TABLENAME, self.FIELDLIST)
-			self.TS.ftn = self.gen.fulltablename(self.SCHEMA, self.TABLENAME)
+			if ts is not None:
+				self.TS = ts
+			else:
+				self.TS = TableSpec(self.SCHEMA, self.TABLENAME, self.FIELDLIST)
+				self.TS.ftn = self.gen.fulltablename(self.SCHEMA, self.TABLENAME)
 		if ts is None:
 			self.ts = self.TS
 		else:
@@ -80,11 +83,6 @@ class SQLTable:
 	def clear(self):
 		self.v = dict()
 
-	def fulltablename(self, dbmgr):
-		if self.ts.ftn is None:
-			self.ts.ftn = dbmgr.mk_tablename(self.ts)
-		return self.ts.ftn
-
 	def validate(self, dbmgr):
 		''' Assures that all local fields exist in the databse
 		Will add missing fields
@@ -119,18 +117,22 @@ class SQLTable:
 		return db_fielddict
 
 	def ensure_table_exists(self, dbmgr):
+		table_list = dbmgr.fetch(self.gen.list_tables(self.ts.schemaname))
 
-		self.ftn = dbmgr.mk_tablename(self.ts)
-		if dbmgr.table_exists(self.ts):
+		flat_list = [x for x in table_list]
+		if  self.ts.tablename in flat_list:
 			return True
-
-		dbmgr.create_schema(self.ts.schemaname)
-		dbmgr.execute(self.generate_create(dbmgr))
-
+		try:
+			dbmgr.execute(self.gen.create_schema(self.ts.schemaname))
+		except IntegrityError:
+			pass
+		try:
+			dbmgr.execute(self.gen.create_table(dbmgr))
+		except IntegrityError:
+			pass
 
 	def truncate(self, dbmgr):
 		dbmgr.execute(self.gen.truncate(self.ts.ftn))
-
 
 	def drop(self, dbmgr):
 		try:
@@ -143,11 +145,10 @@ class SQLTable:
 		if len(self.ts.dimensions) == 0:
 			return
 
-		result = dbmgr.fetch(self.gen.get_thaumkey_data(), (self.ts.tablename, self.ts.schemaname))
-		if len(result) > 1:
-			for row in result:
-				dbmgr.execute(self.gen.drop_constraint(row[2])
-		elif len(result) == 1:
+		# get a list of constraints with thaumkey tag
+		# Return format: database_name, table_name, index_name, columns, constraint_type "
+		result = dbmgr.fetch(self.gen.thaumkey_details(), [self.ts.tablename, self.ts.schemaname])
+		if len(result) == 1:
 			therow = result[0]
 			columns = set(therow.columns.split(","))
 			if len(columns) == len(self.ts.dimensions):
@@ -155,44 +156,28 @@ class SQLTable:
 				union_dims = dims.intersection(columns)
 				if len(union_dims) == len(self.ts.dimensions):
 					return
-			dbmgr.drop_constraint(therow[2])
+			# Thaumkey didn't match the expected, so delete and recreate
+			dbmgr.execute(self.gen.drop_constraint(therow[1], therow[2]))
+		elif len(result) > 1:
+			# If there are multiple, deleting all and
+			for row in result:
+				dbmgr.execute(self.gen.drop_constraint(row[1], row[2]))
 
 		dbmgr.add_unique_constraint(self.ts.dimensions, constraint_name=f'thaumkey_{self.ts.schemaname}_{self.ts.tablename}')
 
 	def add_column(self, dbmgr, fielddef):
 		# self.mktblnm(dbmgr)
-		sql = f"ALTER TABLE {self.ftn} ADD {fielddef.fixedname} {dbmgr.type_declaration(fielddef.fd)}"
+		sql = self.gen.add_column(self.ts.ftn, fielddef, dbmgr.type_declaration(fielddef.fd))
 		dbmgr.execute(sql)
 		self.ensure_thaumkey(dbmgr)
 
-	def alter_column(self, dbmgr, sqlfield):
+	def alter_column(self, dbmgr, fielddef):
 		# self.mktblnm(dbmgr)
-		sql = f"ALTER TABLE {self.ftn} ALTER COLUMN {sqlfield.fixedname} {dbmgr.type_declaration(sqlfield.fd)}"
+		sql = self.gen.alter_column(self.ts.ftn, fielddef, dbmgr.type_declaration(fielddef.fd))
 		dbmgr.execute(sql)
 
 	def drop_constraint(self, dbmgr, constraint_name):
-		dbmgr.execute(self.gen.drop_constraint(constraint_name))
-
-	def generate_create(self, dbmgr):
-		# self.mktblnm(dbmgr)
-		if self.ts.fieldlist is None:
-			raise NotImplementedError
-		fields = []
-		for itr in self.ts.fieldlist:
-			fields.append(f"[{itr.name}] {dbmgr.type_declaration(itr.fd)}")
-
-		holder = [
-			dbmgr.sql_create_if_not_exists(self.ts),
-			dbmgr.mk_tablename(self.ts),
-			"(",
-			",".join(fields),
-		]
-		if len(self.ts.dimensions) > 0:
-			holder.append(f", CONSTRAINT thaumkey_{self.ts.schemaname}_{self.ts.tablename} UNIQUE (")
-			holder.append(",".join(self.ts.dimensions))
-			holder.append(')')
-		holder.append(')')
-		return dbmgr.adjust_query(" ".join(holder))
+		dbmgr.execute(self.gen.drop_constraint(self.ts.tablename, constraint_name))
 
 	def assure_pk(self, dbmgr):
 		''' Will return the primary key value if it is set.
@@ -202,27 +187,35 @@ class SQLTable:
 		generated id's.
 		'''
 		if self.ts.pk is None:
-			raise ValueError(f"Table {self.fulltablename(dbmgr)}: Attempt to retrieve a primary key when none assigned")
+			raise ValueError(f"Table {self.ts.ftn}: Attempt to retrieve/generate a primary key when none assigned")
+		# Check if pk already has a value
 		if self.ts.pk.name in self.v and self.v[self.ts.pk.name] is not None:
 			return self.v[self.ts.pk.name]
 
 		for itr in self.ts.dimensions:
 			if itr not in self.v:
-				raise ValueError(f"Table {self.fulltablename(dbmgr)}: Cannot store without dimension {itr} being populated")
+				raise ValueError(f"Table {self.ts.ftn}: Cannot store without dimension {itr} being populated")
 		
-		select_sql, select_values = self.generate_select(dbmgr)
+		select_sql, select_values = self.gen.select_by_dim(self.ts, self.v)
 		response = dbmgr.fetch(select_sql, select_values)
 
 		if len(response) == 0:
-			insert_sql, insert_values = self.generate_insert(dbmgr)
-			dbmgr.execute(insert_sql, insert_values)
+			self.do_insert(dbmgr)
 			response = dbmgr.fetch(select_sql, select_values)
 			if len(response) == 0:
 				raise ValueError("Failed to insert row into database: {self.v}")
+
 		self.set_values(response[0])
 		return self.v[self.ts.pk.name]
 
-	def get_primary_key(self, tablename):
+	def has_pk(self):
+		if self.ts.pk is None:
+			return False
+		if self.ts.pk.name in self.v and self.v[self.ts.pk.name] is not None:
+			return True
+		return False
+
+	def derive_primary_key(self, tablename):
 		"""Returns the name of the primary key as a string when the underlying database
 		 does not have that information. This might involve looking up the table name
 		 in a configuration file, or a fancy algorithm run on the contents.
@@ -234,140 +227,78 @@ class SQLTable:
 		if len(result) > 0:
 			self.set_values(result[0])
 
-	def pk_update(self, dbmgr):
-		''' This function will overwrite whatever is in the row identified by the primary key
-		'''
-		if not self.has_pk():
-			raise ValueError(f"Table {self.fulltablename(dbmgr)}: Attempt to store by primary key when none assigned")
-		setlist = []
-		valuelist = []
-		pkname = self.ts.pk.name
-		for key, value in self.v.items():
-			if key == pkname:
-				continue
-			setlist.append(f"[{key}]={dbmgr.plhd}")
-			valuelist.append(value)
-		valuelist.append(self.v[pkname])
-		fullset = ",".join(setlist)
-		sql = [f"UPDATE {self.fulltablename(dbmgr)}",
-		       f"SET {fullset} WHERE [{pkname}]={dbmgr.plhd}"
-		       ]
-		dbmgr.execute(' '.join(sql), valuelist)
-		return dbmgr.rowcount
-
 	def do_insert(self, dbmgr):
-		insertstr, values = self.generate_insert(dbmgr)
-		dbmgr.logger.debug(f"Performing do_insert by keys {insertstr}, {values}")
+		sql, values = self.gen.insert(self.ts, self.v)
+		dbmgr.logger.debug(f"Performing do_insert by keys {sql}, {values}")
 		try:
-			dbmgr.execute(dbmgr.adjust_query(insertstr), values)
+			dbmgr.execute(sql, values)
 			self.balance("i")
 			return 1
 		except IntegrityError:
 			return 0
 
+	def do_pk_update(self, dbmgr):
+		sql, values = self.gen.update_by_pk(self.ts, self.v)
+		dbmgr.execute(sql, values)
+		return dbmgr.rowcount
+
+	def do_dim_update(self, dbmgr):
+		sql, values = self.gen.update_by_dim(self.ts, self.v)
+		dbmgr.execute(sql, values)
+		return dbmgr.rowcount
+
 	def do_update(self, dbmgr):
 		''' Performs and update based on the thaumkey '''
-		updatestr, values = self.generate_update(dbmgr)
-		try:
-			dbmgr.execute(dbmgr.adjust_query(updatestr), values)
-			if dbmgr.rowcount > 0:
+		if self.has_pk():
+			if self.do_pk_update(dbmgr) > 0:
 				self.balance("u")
 			return dbmgr.rowcount
-		except dbmgr.IntegrityError:
-			return 0
+		if self.do_dim_update(dbmgr) > 0:
+			self.balance("u")
+		return dbmgr.rowcount
 
 	def store(self, dbmgr, values=None):
 		"""This will make the upsert/indate preferentially attempt whichever is more likely to succeed
 		based on recent attempts. Successful updates and inserts will increment the neuro values
 		neuro values will degrade over time.
 		"""
+		if values is not None:
+			self.set_values(values)
+		# any thaum_update_ts field is a datetime field that tells you when the
+		# last time this row was updated
 		if 'thaum_update_ts' in self.ts.f:
 			self.v['thaum_update_ts'] = dbmgr.format_datetime(datetime.now(tz=UTC))
-		if len(self.ts.metrics) == 0:
-			self.do_insert(dbmgr)
-			return
 		if self.has_pk():
 			self.pk_update(dbmgr)
 			return
-		if self.neuro_insert > self.neuro_update:
-			self.indate(dbmgr, values)
-		else:
-			self.upsert(dbmgr, values)
-
-	def has_pk(self):
-		if self.ts.pk is None:
-			return False
-		if self.ts.pk.name in self.v and self.v[self.ts.pk.name] is not None:
-			return True
-		return False
-
-	def upsert(self, dbmgr, values=None):
-		if values is not None:
-			self.set_values(values)
-		if self.has_pk():
-				# print(f"Performing PK upsert")
-			return self.pk_update(dbmgr)
-
 		for fieldname in self.ts.dimensions:
-			if fieldname not in self.v:
+			if fieldname not in self.v or self.v[fieldname] is None:
 				raise ValueError(f"Attempt to upsert table {self.fulltablename(dbmgr)} "
 								f"without setting dimension {fieldname}")
 
+		# If there are no metrics, there are no values to update.
+		# If there are no dimensions, there is no way to identify a row to update
+		if len(self.ts.metrics) == 0 or len(self.ts.dimensions) == 0:
+			self.do_insert(dbmgr)
+			return
+
+		if self.neuro_insert > self.neuro_update:
+			self.indate(dbmgr)
+		else:
+			self.upsert(dbmgr)
+
+	def upsert(self, dbmgr):
 		if self.do_update(dbmgr) == 1:
 			return 1
 		return self.do_insert(dbmgr)
 
-	def indate(self, dbmgr, values=None):
-		if values is not None:
-			self.set_values(values)
-
-		for onefield in self.FIELDLIST:
-			if onefield.fd.is_pk and onefield.name in self.v and self.v[onefield.name] is not None:
-				# print(f"Performing PK upsert")
-				return self.pk_upsert(dbmgr, onefield)
-
-		for fieldname in self.ts.dimensions:
-			if fieldname not in self.v:
-				raise ValueError(f"Attempt to upsert table {self.fulltablename(dbmgr)} "
-								f"without setting dimension {fieldname}")
+	def indate(self, dbmgr):
 		if self.do_insert(dbmgr) == 1:
 			dbmgr.logger.debug(f"insert from indate successful")
 			return 1
 		dbmgr.logger.debug(f"insert from indate failed, updating")
-		if self.has_pk():
-				# If primary key is populated, then this will definitely be an update
-			return self.pk_update(dbmgr)
 		self.do_update(dbmgr)
 		return dbmgr.rowcount
-
-	def fetch_to_dict(self, columnnames, query, params=None, raw=False, retries=0):
-		if not raw:
-			query = self.adjust_query(query)
-		if self.cnxn is None:
-			self.connect()
-		retval = None
-		while retries > 0:
-			retries -= 1
-			retval = self._fetch_to_dict(columnnames, query, params)
-		return retval
-
-	def _fetch_to_dict(self, columnnames, query, params):
-		self.last_query = query
-		self.last_parameters = params
-		self.logger.debug(f"{self.__class__.__name__}, fetching {query}, {params}", end=",")
-
-		retval = []
-		with self.connection.cursor() as cursor:
-			if params:
-				cursor.execute(query, params)
-			else:
-				cursor.execute(query)
-			self.rowcount = 0
-		for row in cursor.fetchall():
-			self.rowcount += 1
-			retval.append(dict(zip(columnnames, row)))
-
-		return retval
 
 	def delete(self, dbmgr):
 		'''
@@ -378,129 +309,11 @@ class SQLTable:
 		'''
 
 		if self.has_pk():
-			pk = self.ts.pk.name
-			# If primary key is populated delete by this value
-			sql = f"DELETE FROM {self.fulltablename(dbmgr)} WHERE [{pk}] = ?" # nosec
-			dbmgr.execute(sql, [self.v[pk]])
-			return
-
-		whereclause = []
-		values = []
-		for key in self.dimensions:
-			if key not in self.v or self.v[key] is None:
-				raise ValueError(f"Table {self.tablename} cannot perform blind delete unless all keys are populated. " 
-				                 f"Key {key} was not set.")
-			whereclause.append(f"[{key}] = {dbmgr.plhd}")
-			values.append(self.v[key])
-		whereclause = ' AND '.join(whereclause)
-		sql = f"DELETE FROM {self.fulltablename(dbmgr)} WHERE {whereclause}" # nosec
+			sql, values = self.gen.delete_by_pk(self.ts, self.v)
+		else:
+			sql, values = self.gen.delete_by_dim(self.ts, self.v)
 		dbmgr.execute(sql, values)
 
-	# SQL Generators
-	def generate_insert(self, dbmgr):
-		#		self.mktblnm(dbmgr)
-		fieldnames = []
-		plhd = []
-		values = []
-		#		print(f"self.v = {self.v}")
-		for itr in self.ts.non_seqids:
-			fd = self.ts.f[itr].fd
-			#			print(f"fd = {fd}")
-			if itr in self.v and self.v[itr] is not None:
-				fieldnames.append(itr)
-				plhd.append(dbmgr.plhd)
-				values.append(self.v[itr])
-			elif not fd.nullable:
-				if fd.default is not None:
-					self.v[itr] = fd.default
-					fieldnames.append(itr)
-					plhd.append(dbmgr.plhd)
-					values.append(self.v[itr])
-				else:
-					raise ValueError(f"Attempting to write to table {self.fulltablename(dbmgr)}, " 
-									f"but field {itr} is not nullable and has no value")
-
-		insert_field_str = "[%s]" % "],[".join(fieldnames)
-		insert_plhd_str = ','.join(plhd)
-		insert_str = f'INSERT INTO {self.fulltablename(dbmgr)} ({insert_field_str}) VALUES ({insert_plhd_str})'
-
-		return insert_str, values
-
-	def generate_whereconditions(self, dbmgr):
-		#		self.mktblnm(dbmgr)
-		dimensions = []
-		values = []
-		for key in self.ts.dimensions:
-			fd = self.ts.f[key].fd
-			if key not in self.v:
-				continue
-			if self.v[key] is None and not fd.nullable:
-				raise ValueError(
-					f"Attempting to update or delete from table {self.fulltablename(dbmgr)}, " # nosec
-					f"but field {key} is not nullable and where clause is looking for null"
-				)
-			if self.v[key] is None:
-				dimensions.append(f"[{key}] is null")
-			else:
-				dimensions.append(f"[{key}] = {dbmgr.plhd}")
-				values.append(self.v[key])
-		return dimensions, values
-
-	def generate_blind_whereclause(self, dbmgr):
-		# 		self.mktblnm(dbmgr)
-		dimensions = []
-		values = []
-		for key in self.dimensions:
-			if key not in self.v or self.v[key] is None:
-				raise ValueError(
-					f"Attempting to update or delete from table {self.fulltablename(dbmgr)}, " # nosec
-					f"but field {key} is not nullable and where clause is looking for null"
-				)
-			dimensions.append(f"[{key}] = {dbmgr.plhd}")
-			values.append(self.v[key])
-		return dimensions, values
-
-	def generate_update(self, dbmgr):
-		# 		self.mktblnm(dbmgr)
-		metrics = []
-		dimensions = []
-		values = []
-
-		for itr in self.ts.metrics:
-			fd = self.ts.f[itr].fd
-			if itr not in self.v:
-				continue
-			if self.v[itr] is None and not fd.nullable:
-				raise ValueError(f"Attempting to update table {self.fulltablename(dbmgr)}, " 
-								f"but field {itr} is not nullable and has no value")
-			metrics.append(f"[{itr}] = {dbmgr.plhd}")
-			values.append(self.v[itr])
-
-		if len(metrics) == 0:
-			# There's no difference between an update and an insert if there are no metrics to update
-			return None, "no metrics to update"
-
-		dimensions, wherevalues = self.generate_whereconditions(dbmgr)
-		if len(wherevalues) > 0:
-			values.extend(wherevalues)
-
-		metrics_str = ','.join(metrics)
-		if len(dimensions) > 0:
-			dimensions_str = ' and '.join(dimensions)
-			update_str = f'UPDATE {self.fulltablename(dbmgr)} SET {metrics_str} WHERE {dimensions_str}'
-		else:
-			update_str = f'UPDATE {self.fulltablename(dbmgr)} SET {metrics_str}'
-		return update_str, values
-
-	def generate_select(self, dbmgr):
-		# self.mktblnm(dbmgr)
-		whereconditions, values = self.generate_whereconditions(dbmgr)
-		whereclause = ' AND '.join(whereconditions)
-		sql = ' '.join([
-			f"SELECT {self.ts.fieldnames_str}",
-			f"FROM {self.fulltablename(dbmgr)}",
-			f"WHERE {whereclause}"])
-		return sql, values
 
 	def load_from_dict(self, content):
 		usedkeys = []
@@ -532,7 +345,7 @@ class SQLTable:
 		return '|'.join(retval)
 
 	@classmethod
-	def load_from_csv(cls, dbmgr, filename):
+	def load_from_csvfile(cls, dbmgr, filename):
 		''' Open filename as csvreader
 		get column names
 		validate that columns exist in this class
@@ -543,12 +356,8 @@ class SQLTable:
 		raise NotImplementedError
 
 	def select(self, dbmgr, sqlwhere=None, sqlorderby=None, params=None, retform=RETFORM_LIST):
-		query = [f"SELECT {self.ts.fieldnames_str} FROM {self.fulltablename(dbmgr)}"]
-		if sqlwhere is not None:
-			query.append(f"WHERE {sqlwhere}")
-		if sqlorderby is not None:
-			query.append(f"ORDER BY {sqlorderby}")
-		query = ' '.join(query)
+		''' An arbitrary select function, byo clauses'''
+		query = self.gen.select(self.ts, sqlwhere, sqlorderby)
 		try:
 			response = dbmgr.fetch(query, params)
 		except dbmgr.ProgrammingError:
@@ -576,6 +385,17 @@ class SQLTable:
 			holder.v = row
 			ret_obj.append(holder)
 		return ret_obj
+
+
+	def select_objects(self, dbmgr, sqlwhere=None, sqlorderby=None, params=None):
+		return self.select(dbmgr, sqlwhere=sqlwhere,
+		        sqlorderby=sqlorderby, params=params, retform=RETFORM_OBJ)
+
+	def select_by_dimensions(self, dbmgr):
+		if len(self.ts.dimensions) == 0:
+			raise ValueError("select_by_dimensions: No dimensions to select")
+		sql, values = self.gen.select_by_dim(self.ts, self.v)
+		return dbmgr.fetch(sql, values)
 
 
 	def format_from_db(self, dbmgr, values):
@@ -627,38 +447,13 @@ class SQLTable:
 		elif isinstance(values, list):
 			self.v = self.list_to_dict(self.ts, values)
 
-	def select_objects(self, dbmgr, sqlwhere=None, sqlorderby=None, params=None):
-		return self.select(dbmgr, sqlwhere=sqlwhere,
-		        sqlorderby=sqlorderby, params=params, retform=RETFORM_OBJ)
-
-	def select_by_dimensions(self, dbmgr):
-		if len(self.ts.dimensions) == 0:
-			raise ValueError("select_by_dimensions: No dimensions to select")
-		wheredats = []
-		params = []
-		for field in self.ts.dimensions:
-			if field in self.v:
-				wheredats.append(f"{field}=?")
-				params.append(self.v[field])
-			else:
-				raise ValueError(f"Dimension {field} missing when selecting by dimensions")
-
-		return self.select(dbmgr, sqlwhere=' and '.join(wheredats), params=params)
-
 	def delete_where(self, dbmgr, sqlwhere, params=None):
-		sql = f"DELETE FROM {self.ts.ftn} WHERE {sqlwhere}" # nosec
-		retval = dbmgr.execute(sql, params=params)
+		sql = self.gen.delete(self.ts, sqlwhere=sqlwhere)
+		if params is None:
+			retval = dbmgr.execute(sql)
+		else:
+			retval = dbmgr.execute(sql, params=params)
 		return retval
-
-	def update_from_csv(self, dbmgr, filename, headerlist=None):
-		''' Open filename as csvreader
-		get column names
-		validate that columns exist in this class
-		for row:
-			put row into values
-			upsert values
-		'''
-		raise NotImplementedError
 
 	def establish_seqid(self, dbmgr):
 		if 'seqid' not in self.ts.f:
@@ -690,7 +485,7 @@ class SQLTable:
 		retval = dict()
 		for cursor in range(len(ts.fieldlist)):
 			fn = ts.fieldnames[cursor]
-			retval[ts.fieldnames[cursor]] = lst[cursor]
+			retval[fn] = lst[cursor]
 		return retval
 
 # Should be moved to analysis
