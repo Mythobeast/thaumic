@@ -174,14 +174,14 @@ change required to nullable
 			if isinstance(value, str):
 				if len(value) == 0:
 					return None
-				if self.engine == 'mssql':
+				if self.engine == 'mssql_mgr':
 					if self.fd.type_name in ['DATETIME']:
 						return datetime.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")
 					elif self.fd.type_name == 'DATE':
 						return datetime.strptime(value, "%Y-%m-%d")
 					elif self.fd.type_name in ['TIME']:
 						return datetime.strptime(value, "%H:%M:%S")
-				if self.engine == 'mariadb':
+				if self.engine == 'mariadb_mgr':
 					if self.fd.type_name in ['DATETIME', 'TIMESTAMP']:
 						return datetime.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")
 		return value

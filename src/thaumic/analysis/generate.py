@@ -3,8 +3,8 @@
 import sys
 
 from pyhocon import ConfigFactory
-from thaumic.adapters.mssql.dbschema import DbSchema
-from thaumic.adapters.mssql.manager import getpersonal
+from thaumic.adapters.mssql_mgr.dbschema import DbSchema
+from thaumic.adapters.mssql_mgr.manager import getpersonal
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
 
 	conf = ConfigFactory.parse_file(configfile)
 	dbspec = conf.dbspec
-	if dbspec['ENGINE'] != 'mssql':
+	if dbspec['ENGINE'] != 'mssql_mgr':
 		print("This function currently only works for SQL Server")
 		return
 #	dbmgr = getpersonal(conf.dbspec)

@@ -39,7 +39,7 @@ class MsSqlManager(CnxnManager):
 
 	def __init__(self, dbspec, logger=None):
 		super().__init__(dbspec, logger)
-		self.engine = 'mssql'
+		self.engine = 'mssql_mgr'
 		self.trusted = dbspec.get('TRUSTED', False)
 		self.authentication = dbspec.get('AUTHENTICATION', None)
 		self.auto_increment = 'IDENTITY(1,1)'

@@ -13,7 +13,7 @@ class BcpInterface:
 		self.trusted = None
 
 	def set_dbspec(self, dbspec):
-		if 'ENGINE' not in dbspec or dbspec['ENGINE'] != 'mssql':
+		if 'ENGINE' not in dbspec or dbspec['ENGINE'] != 'mssql_mgr':
 			raise ValueError(f"BcpInterface does not support engine {dbspec['ENGINE']}")
 		if 'DSN' in dbspec:
 			self.dsn = dbspec['DSN']

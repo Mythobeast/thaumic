@@ -82,7 +82,7 @@ class FieldData:
 	C_18 = 18
 
 	def __init__(self, fs=None):
-		# Initialize all members to None before we figure out what to do with fs
+		# Initialize all members to None until we figure out what to do with fs
 		self.engine = None
 		self.table_qualifier = None
 		self.table_owner = None

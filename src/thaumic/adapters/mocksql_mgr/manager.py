@@ -17,7 +17,7 @@ def getpersonal(dbspec, logger_in=None):
 class MockSqlManager(CnxnManager):
 	def __init__(self, dbspec, logger=None):
 		super().__init__(dbspec, logger)
-		self.engine = 'mocksql'
+		self.engine = 'mocksql_mgr'
 		self.cnxn = Mock()
 		self.executed = None
 		self.params = None

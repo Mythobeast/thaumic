@@ -1,4 +1,4 @@
-from thaumic.adapters.mssql.sqltable import MsSQLTable
+from thaumic.adapters.mssql_mgr.sqltable import MsSQLTable
 
 TODOLIST = ['Personnel', 'Response_Master_Incident', 'Response_Vehicles_Assigned']
 

@@ -23,7 +23,7 @@ class MsSqlManager(CnxnManager):
 	def __init__(self, dbspec, logger=None):
 		super().__init__(dbspec, logger)
 		self.rowcount = None
-		self.engine = 'mssql'
+		self.engine = 'mssql_mgr'
 		self.auto_increment = 'IDENTITY(1,1)'
 		self.cnxn = None
 		self.connect()

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from thaumic.base.sqltable import SQLTable
-from thaumic.adapters.mssql.sqlfield import MsSQLField
+from thaumic.adapters.mssql_mgr.sqlfield import MsSQLField
 from thaumic.base.fielddata import FieldData
 
 SP_FORMAT_OUTPUT = 1
@@ -99,7 +99,7 @@ class MsSQLTable(SQLTable):
 		tablename = firstfield.fd.table_name
 		dbspec['DATABASE'] = firstfield.fd.table_qualifier
 		dbspec['SCHEMA'] = firstfield.fd.table_owner
-		dbspec['ENGINE'] = 'mssql'
+		dbspec['ENGINE'] = 'mssql_mgr'
 		return MsSQLTable(tablename=tablename, schema=firstfield.fd.table_owner, fieldlist=fieldlist)
 
 

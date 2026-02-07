@@ -1,9 +1,6 @@
-
-
 from sys import platform
 from thaumic.base.manager import CnxnManager
 from thaumic.base.typemappings import PARAMLESS_TYPES, CHAR_TYPES, FLOAT_TYPES, DECIMAL_TYPES
-
 
 if platform == "linux" or platform == "linux2":
 	# noinspection PyUnresolvedReferences
@@ -37,11 +34,9 @@ def getpersonal(spec_in, logger=None):
 class MySqlManager(CnxnManager):
 	def __init__(self, dbspec, logger=None):
 		super().__init__(dbspec, logger)
-		self.engine = 'mariadb'
+		self.engine = 'mariadb_mgr'
 		self.trusted = dbspec.get('TRUSTED', False)
 		self.authentication = dbspec.get('AUTHENTICATION', None)
-		self.auto_increment = 'AUTO_INCREMENT'
-		self.plhd = '%s'
 		self.cnxn = None
 		self.connect()
 
@@ -248,9 +243,9 @@ class MySqlManager(CnxnManager):
 
 	def get_jdbc_connstr(self):
 		if self.port == 3306:
-			return f'jdbc:mariadb://{self.host}/{self.database}'
+			return f'jdbc:mariadb_mgr://{self.host}/{self.database}'
 		else:
-			return f'jdbc:mariadb://{self.host}:{self.port}/{self.database}'
+			return f'jdbc:mariadb_mgr://{self.host}:{self.port}/{self.database}'
 
 	def drop_table(self, ts):
 		if self.table_exists(ts):

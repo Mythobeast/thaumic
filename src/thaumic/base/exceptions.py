@@ -3,7 +3,6 @@
 class IntegrityError(Exception):
 	pass
 
-
 class OperationalError(Exception):
 	pass
 

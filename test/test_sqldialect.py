@@ -4,39 +4,9 @@ from datetime import datetime
 from thaumic import SQLTable, SQLField
 from thaumic.base.exceptions import IntegrityError
 from thaumic.base.sqldialect import SQLDialect
+from test.sqltablemock import SQLTableTester1, SQLTableTester2, SQLTableTester3
 
 ARBITRARY_DT = datetime(2001, 2, 3, 4, 5, 6)
-
-
-class SQLTableTester1(SQLTable):
-	TABLENAME = 'table1test'
-	SCHEMA = 'testschema'
-	FIELDLIST = [
-		SQLField('testint', 'INT', 0, 'IDENTITY'),
-		SQLField('testdatetime', 'DATETIME'),
-		SQLField('testdouble', 'DOUBLE'),
-		SQLField('testvarchar', 'VARCHAR(250)', 0, 'UNIQUE')
-	]
-
-class SQLTableTester2(SQLTable):
-	TABLENAME = 'table2test'
-	SCHEMA = 'testschema'
-	FIELDLIST = [
-		SQLField('testint', 'INT'),
-		SQLField('testdatetime', 'DATETIME', 0),
-		SQLField('testdouble', 'DOUBLE', 1),
-		SQLField('testvarchar', 'VARCHAR(250)', 1, 'UNIQUE')
-	]
-
-class SQLTableTester3(SQLTable):
-	TABLENAME = 'table3test'
-	SCHEMA = 'testschema'
-	FIELDLIST = [
-		SQLField('testint', 'INT PRIMARY KEY AUTO_INCREMENT', 0),
-		SQLField('testdatetime', 'DATETIME', 0),
-		SQLField('testdouble', 'DOUBLE', 1),
-		SQLField('testvarchar', 'VARCHAR(250)', 1, 'UNIQUE')
-	]
 
 
 class Test_ProcControl(unittest.TestCase):
@@ -45,11 +15,11 @@ class Test_ProcControl(unittest.TestCase):
 		# self.mockdbspec = Mock()
 		# self.mockdbspec.dbname = 'mockdbname'
 		# self.mockdbspec.schema = 'mockschema'
-		# self.mockdbspec.engine = 'mssql'
+		# self.mockdbspec.engine = 'mssql_mgr'
 		self.mockdbspec = dict()
 		self.mockdbspec['DATABASE'] = 'mockdbname'
 		self.mockdbspec['SCHEMA'] = 'mockschema'
-		self.mockdbspec['ENGINE'] = 'mssql'
+		self.mockdbspec['ENGINE'] = 'mssql_mgr'
 
 		self.tablename = 'mocktablename'
 		self.table1 = SQLTableTester1()

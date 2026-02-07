@@ -1,20 +1,19 @@
-#from xxsubtype import bench
+from thaumic.base.sqldialect import SQLDialect
 from thaumic.base.typemappings import DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, \
 	PARAMLESS_TYPES
 from thaumic.base.exceptions import IntegrityError
 
 
-class SQLDialect:
-	PLHD = '?'
-	IQO = '"'  # Identifier quote open
-	IQC = '"'  # Identifier quote close
-	TYPESPEC = None
-	AUTOINCREMENT = 'AUTO_INCREMENT'
-	PRIMARYKEY = 'PRIMARY KEY'
+class SqliteDialect(SQLDialect):
 
 	@classmethod
 	def add_column(cls, ftn, field):
 		return f"ALTER TABLE {ftn} ADD {cls.IQO}{field.fixedname}{cls.IQC} {cls.type_declaration(field.fd)}"
+
+	@classmethod
+	def add_unique_constraint(cls, ftn, column_list, constraintname):
+		col_list_str = f"{cls.IQC},{cls.IQO}".join(column_list)
+		return f'CREATE UNIQUE INDEX {constraintname} ON {ftn}({cls.IQO}{col_list_str}{cls.IQC})'
 
 	@classmethod
 	def alter_column(cls, ftn, field):
@@ -32,14 +31,7 @@ class SQLDialect:
 		for field in ts.f.values():
 			fields.append(f"{cls.IQO}{field.fixedname}{cls.IQC} {cls.type_declaration(field.fd)}")
 
-		holder = [
-			"CREATE TABLE", ts.ftn, "(", ",".join(fields)
-		]
-		if len(ts.dimensions) > 0:
-			holder.append(f", CONSTRAINT {cls.IQO}thaumkey_{ts.schemaname}_{ts.tablename}{cls.IQC} UNIQUE (")
-			holder.append(",".join(ts.dimensions))
-			holder.append(')')
-		holder.append(')')
+		holder = [ "CREATE TABLE", ts.ftn, "(", ",".join(fields), ")" ]
 		return " ".join(holder)
 
 	@classmethod
@@ -72,17 +64,13 @@ class SQLDialect:
 		return f"DROP TABLE {ftn}"
 
 	@classmethod
+	def drop_constraint(cls, table_name, constraint_name):
+		return f"ALTER TABLE {cls.IQO}{table_name}{cls.IQC} DROP CONSTRAINT {cls.IQO}{constraint_name}{cls.IQC}"
+
+
+	@classmethod
 	def fulltablename(cls, schema, tablename):
-		return f'{cls.IQO}{schema}{cls.IQC}.{cls.IQO}{tablename}{cls.IQC}'
-
-	@classmethod
-	def modify_column(cls, fielddata, fieldname):
-		return f"ALTER TABLE {fielddata.table.ftn} MODIFY COLUMN {fieldname} {cls.type_declaration(fielddata.fd)}"
-
-	@classmethod
-	def rename_column(cls, fielddata, fieldname):
-		return f"ALTER TABLE {fielddata.table.ftn} RENAME COLUMN {fieldname} TO {fielddata.fixedname}"
-
+		return f'{cls.IQO}{schema}_{tablename}{cls.IQC}'
 
 	@classmethod
 	def get_field_list(cls, ts):
@@ -139,13 +127,13 @@ class SQLDialect:
 
 	@classmethod
 	def list_tables(cls, schema=None):
-		''' This is the ansi-standard way to get a list of tables in a database.'''
-		query = (f"SELECT {cls.IQO}table_name{cls.IQC} FROM {cls.IQO}information_schema{cls.IQC}.{cls.IQO}tables{cls.IQC} "
-		         f"WHERE {cls.IQO}table_type{cls.IQC}='BASE TABLE'")
+		query = [f"SELECT {cls.IQO}name{cls.IQC} FROM {cls.IQO}sqlite_schema{cls.IQC} ",
+				f"WHERE {cls.IQO}type{cls.IQC}='table' AND "]
 		if schema:
-			query += f" AND {cls.IQO}table_schema{cls.IQC} = '{schema}'"
-		query += f" GROUP BY {cls.IQO}table_name{cls.IQC}"
-		return query
+			query.append(f"{cls.IQO}name{cls.IQC} LIKE '{schema}_%'")
+		else:
+			query.append(f"{cls.IQO}name{cls.IQC} NOT LIKE 'sqlite_%'")
+		return ' '.join(query)
 
 	@classmethod
 	def select(cls, ts, sqlwhere=None, sqlorderby=None):
@@ -171,14 +159,7 @@ class SQLDialect:
 
 	@classmethod
 	def table_exists(cls, ts):
-		sql = ("select stat.table_schema as database_name, "
-            "stat.table_name, "
-            "from information_schema.statistics stat "
-            f"and stat.table_schema = {cls.PLHD} "
-            f"and stat.table_name = {cls.PLHD} "
-            "group by stat.table_schema, stat.table_name, "
-            "order by stat.table_schema, stat.table_name; ")
-		return sql, [ts.schemaname, ts.tablename]
+		return f"SELECT name FROM sqlite_master WHERE type='table' AND name={cls.PLHD}"
 
 	@classmethod
 	def thaumkey_details(cls):
@@ -233,15 +214,13 @@ class SQLDialect:
 					typename = f'DECIMAL({fd.precision},{fd.scale})'
 
 		retval = [typename]
-		if cls.AUTOINCREMENT in tn_upper or 'IDENTITY' in tn_upper or fd.autoinc_seed is not None:
+		if 'AUTO_INCREMENT' in tn_upper or 'IDENTITY' in tn_upper or fd.autoinc_seed is not None:
 			retval.append('AUTO_INCREMENT')
 
 		if fd.is_pk:
-			retval.append(cls.PRIMARYKEY)
+			retval.append('PRIMARY KEY')
 
 		return ' '.join(retval)
-
-
 
 
 	@classmethod
@@ -305,32 +284,5 @@ class SQLDialect:
 		if pk not in values or values[pk] is None:
 			raise IntegrityError("Cannot perform pk operation unless pk is set")
 		return f"{cls.IQO}{pk}{cls.IQC}={cls.PLHD}", [values[pk]]
-
-	@classmethod
-	def drop_column(cls, ts, sqlfield):
-		return f"ALTER TABLE {ts.ftn} DROP COLUMN {sqlfield}"
-
-	@classmethod
-	def add_constraint(cls, ts, constraint_name, fieldlist):
-		fieldstr = '","'.join(fieldlist)
-		return f'ALTER TABLE {ts.ftn} ADD CONSTRAINT {constraint_name} UNIQUE ("{fieldstr}");'
-
-	@classmethod
-	def drop_constraint(cls, ts, constraint_name):
-		return f'ALTER TABLE {ts.ftn} DROP CONSTRAINT {constraint_name};'
-
-	@classmethod
-	def get_thaumkey_fields(cls, ts):
-		return """SELECT
-			kcu.column_name
-		FROM information_schema.table_constraints AS tc 
-		JOIN information_schema.key_column_usage AS kcu
-			ON tc.constraint_name = kcu.constraint_name
-			AND tc.table_schema = kcu.table_schema
-		WHERE tc.constraint_name LIKE 'thaumkey%'
-			AND tc.constraint_type = 'UNIQUE'
-			AND tc.table_name = '{ts.tablename}'
-			AND tc.table_schema = '{ts.schemaname}'
-		ORDER BY tc.constraint_name, kcu.ordinal_position;"""
 
 

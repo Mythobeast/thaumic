@@ -24,11 +24,14 @@ class SQLTable:
 	]
 	CONSTRAINTS = []
 	TS = None
+	DIALECT = None
 
 	def __init__(self, ts=None, v=None, dialect=None):
 		self.ftn = None
 		if dialect is None:
-			self.gen = SQLDialect()
+			self.gen = self.DIALECT
+		else:
+			self.gen = dialect
 		if self.TS is None:
 			if ts is not None:
 				self.TS = ts
@@ -67,6 +70,13 @@ class SQLTable:
 
 		super().__setattr__(name, value)
 
+
+	def set_dialect(self, dialect):
+		if self.DIALECT is None:
+			self.DIALECT = dialect()
+		self.gen = dialect()
+		self.TS.ftn = self.gen.fulltablename(self.SCHEMA, self.TABLENAME)
+		self.ts = self.TS.ftn
 
 	def set(self, key, value):
 		if key not in self.ts.f:
@@ -117,7 +127,8 @@ class SQLTable:
 		return db_fielddict
 
 	def ensure_table_exists(self, dbmgr):
-		table_list = dbmgr.fetch(self.gen.list_tables(self.ts.schemaname))
+		table_list = dbmgr.fetch(dbmgr.gen.list_tables(self.ts.schemaname))
+
 
 		flat_list = [x for x in table_list]
 		if  self.ts.tablename in flat_list:

@@ -1,13 +1,13 @@
-#from xxsubtype import bench
 from thaumic.base.typemappings import DECIMAL_TYPES, FLOAT_TYPES, CHAR_TYPES, \
 	PARAMLESS_TYPES
 from thaumic.base.exceptions import IntegrityError
 
+from thaumic.base.sqldialect import SQLDialect
 
-class SQLDialect:
+class MysqlDialect(SQLDialect):
 	PLHD = '?'
-	IQO = '"'  # Identifier quote open
-	IQC = '"'  # Identifier quote close
+	IQO = '`'  # Identifier quote open
+	IQC = '`'  # Identifier quote close
 	TYPESPEC = None
 	AUTOINCREMENT = 'AUTO_INCREMENT'
 	PRIMARYKEY = 'PRIMARY KEY'

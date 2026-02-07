@@ -1,7 +1,7 @@
 import unittest
 
 from thaumic import SQLTable, SQLField
-from thaumic.adapters.sqlite.manager import SqliteManager
+from thaumic.adapters.sqlite_mgr.manager import SqliteManager
 
 
 class FauxTable(SQLTable):
@@ -68,7 +68,7 @@ class FauxTableLessFloat(SQLTable):
 	]
 
 
-DBSPEC = { 'ENGINE': 'sqlite', 'DBFILE': 'sqlite_test.db', 'DEBUGME': 'true'}
+DBSPEC = { 'ENGINE': 'sqlite_mgr', 'DBFILE': 'sqlite_test.db', 'DEBUGME': 'true'}
 
 CD_FULL = "[['incremental', 'INTEGER', True], ['seqid', 'INTEGER', True], ['someint', 'INTEGER', True], ['somereal', 'REAL', True], ['somestr', 'TEXT', True]]"
 CD_MinInc = "[['seqid', 'INTEGER', True], ['someint', 'INTEGER', True], ['somereal', 'REAL', True], ['somestr', 'TEXT', True]]"

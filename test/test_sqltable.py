@@ -42,11 +42,11 @@ class Test_ProcControl(unittest.TestCase):
 		# self.mockdbspec = Mock()
 		# self.mockdbspec.dbname = 'mockdbname'
 		# self.mockdbspec.schema = 'mockschema'
-		# self.mockdbspec.engine = 'mssql'
+		# self.mockdbspec.engine = 'mssql_mgr'
 		self.mockdbspec = dict()
 		self.mockdbspec['DATABASE'] = 'mockdbname'
 		self.mockdbspec['SCHEMA'] = 'mockschema'
-		self.mockdbspec['ENGINE'] = 'mssql'
+		self.mockdbspec['ENGINE'] = 'mssql_mgr'
 
 		self.tablename = 'mocktablename'
 		self.testee1 = SQLTableTester1()

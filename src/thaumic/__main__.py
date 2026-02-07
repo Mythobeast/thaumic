@@ -1,25 +1,25 @@
 
 try:
-	from thaumic.adapters.mssql.manager import getpersonal as get_mssql_dbmgr
+	from thaumic.adapters.mssql_mgr.manager import getpersonal as get_mssql_dbmgr
 	MSSQL = True
 except ImportError:
 	get_mssql_dbmgr = None
 	MSSQL = False
 try:
-	from thaumic.adapters.mariadb.manager import getpersonal as get_mysql_dbmgr
+	from thaumic.adapters.mariadb_mgr.manager import getpersonal as get_mysql_dbmgr
 	MARIADB = True
 except ImportError:
 	get_mysql_dbmgr = None
 	MARIADB = False
 try:
-	from thaumic.adapters.mocksql.manager import getpersonal as get_mocksql_dbmgr
+	from thaumic.adapters.mocksql_mgr.manager import getpersonal as get_mocksql_dbmgr
 	MOCKSQL = True
 except ImportError:
 	get_mocksql_dbmgr = None
 	MOCKSQL = False
 
 try:
-	from thaumic.adapters.sqlite.manager import getinstance as get_sqlite_dbmgr
+	from thaumic.adapters.sqlite_mgr.manager import getinstance as get_sqlite_dbmgr
 	SQLITE = True
 except ImportError:
 	get_sqlite_dbmgr = None
@@ -29,13 +29,13 @@ except ImportError:
 from thaumic.util.logger import LOGGER
 
 def get_sqlmanager(dbspec, logger=None):
-	if dbspec['ENGINE'] == 'mariadb' and MARIADB:
+	if dbspec['ENGINE'] == 'mariadb_mgr' and MARIADB:
 		return get_mysql_dbmgr(dbspec, logger)
-	elif dbspec['ENGINE'] == 'mssql' and MSSQL:
+	elif dbspec['ENGINE'] == 'mssql_mgr' and MSSQL:
 		return get_mssql_dbmgr(dbspec, logger)
-	elif dbspec['ENGINE'] == 'mocksql' and MOCKSQL:
+	elif dbspec['ENGINE'] == 'mocksql_mgr' and MOCKSQL:
 		return get_mocksql_dbmgr(dbspec, logger)
-	elif dbspec['ENGINE'] == 'sqlite' and SQLITE:
+	elif dbspec['ENGINE'] == 'sqlite_mgr' and SQLITE:
 		return get_sqlite_dbmgr(dbspec, logger)
 	else:
 		if LOGGER:

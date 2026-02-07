@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from thaumic.adapters.mssql.manager import MsSqlManager
+from thaumic.adapters.mssql_mgr.manager import MsSqlManager
 from thaumic.base.fielddata import FieldData
 
 
